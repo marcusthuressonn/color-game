@@ -11,7 +11,7 @@ const INITIAL_ROUND_INDEX = 0
 
 // MODEL
 
-export const Status = S.Literals(['Playing', 'GameOver'])
+export const Status = S.Literals(['Title', 'Playing', 'GameOver'])
 export type Status = typeof Status.Type
 
 export const Model = S.Struct({
@@ -27,10 +27,17 @@ export type Model = typeof Model.Type
 
 export const Booted = m('Booted')
 export const TappedTile = m('TappedTile', { index: S.Number })
+export const ClickedStartRun = m('ClickedStartRun')
 export const ClickedPlayAgain = m('ClickedPlayAgain')
 export const StartedNewRun = m('StartedNewRun', { seed: S.Number })
 
-export const Message = S.Union([Booted, TappedTile, ClickedPlayAgain, StartedNewRun])
+export const Message = S.Union([
+  Booted,
+  TappedTile,
+  ClickedStartRun,
+  ClickedPlayAgain,
+  StartedNewRun,
+])
 export type Message = typeof Message.Type
 
 // COMMAND
@@ -50,6 +57,11 @@ const freshModel = (seed: number): Model => ({
   status: 'Playing',
 })
 
+const titleModel = (): Model => ({
+  ...freshModel(INITIAL_SEED),
+  status: 'Title',
+})
+
 export const update = (
   model: Model,
   message: Message,
@@ -61,7 +73,7 @@ export const update = (
     M.tagsExhaustive({
       Booted: () => [model, []],
       TappedTile: ({ index }) => {
-        if (model.status === 'GameOver') {
+        if (model.status !== 'Playing') {
           return [model, []]
         }
         if (index !== model.board.targetIndex) {
@@ -78,6 +90,7 @@ export const update = (
           [],
         ]
       },
+      ClickedStartRun: () => [model, [GenerateRunSeed()]],
       ClickedPlayAgain: () => [model, [GenerateRunSeed()]],
       StartedNewRun: ({ seed }) => [freshModel(seed), []],
     }),
@@ -85,10 +98,7 @@ export const update = (
 
 // INIT
 
-export const init: Runtime.ProgramInit<Model, Message> = () => [
-  freshModel(INITIAL_SEED),
-  [],
-]
+export const init: Runtime.ProgramInit<Model, Message> = () => [titleModel(), []]
 
 // VIEW
 
@@ -154,7 +164,17 @@ const gameOverView = (score: number): Html =>
     ],
   )
 
+const titleView = (): Html =>
+  div(
+    [Class('title-screen')],
+    [
+      p([Class('title-tagline')], ['Find the odd tile.']),
+      button([Class('start-run'), OnClick(ClickedStartRun())], ['Tap to play']),
+    ],
+  )
+
 export const view = (model: Model): Document => {
+  const isTitle = model.status === 'Title'
   const isGameOver = model.status === 'GameOver'
   return {
     title: 'Color Game',
@@ -162,9 +182,13 @@ export const view = (model: Model): Document => {
       [Class('app')],
       [
         h1([Class('title')], ['Color Game']),
-        scoreView(model.score),
-        boardView(model.board, isGameOver),
-        ...(isGameOver ? [gameOverView(model.score)] : []),
+        ...(isTitle
+          ? [titleView()]
+          : [
+              scoreView(model.score),
+              boardView(model.board, isGameOver),
+              ...(isGameOver ? [gameOverView(model.score)] : []),
+            ]),
       ],
     ),
   }

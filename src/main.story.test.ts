@@ -5,6 +5,7 @@ import { generateBoard } from './board'
 import {
   Booted,
   ClickedPlayAgain,
+  ClickedStartRun,
   GenerateRunSeed,
   type Model,
   StartedNewRun,
@@ -78,6 +79,42 @@ describe('update', () => {
       Story.Command.expectNone(),
       Story.model(model => {
         expect(model).toEqual(gameOverModel)
+      }),
+    )
+  })
+
+  test('tapping any Tile while on the Title screen is ignored', () => {
+    const titleModel: Model = { ...initialModel, status: 'Title' }
+
+    Story.story(
+      update,
+      Story.with(titleModel),
+      Story.message(TappedTile({ index: initialModel.board.targetIndex })),
+      Story.Command.expectNone(),
+      Story.model(model => {
+        expect(model).toEqual(titleModel)
+      }),
+    )
+  })
+
+  test('ClickedStartRun from the Title screen issues GenerateRunSeed and leaves the model unchanged', () => {
+    const titleModel: Model = { ...initialModel, status: 'Title' }
+
+    Story.story(
+      update,
+      Story.with(titleModel),
+      Story.message(ClickedStartRun()),
+      Story.Command.expectExact(GenerateRunSeed),
+      Story.model(model => {
+        expect(model).toEqual(titleModel)
+      }),
+      Story.Command.resolve(GenerateRunSeed, StartedNewRun({ seed: 123 })),
+      Story.model(model => {
+        expect(model.seed).toBe(123)
+        expect(model.roundIndex).toBe(0)
+        expect(model.score).toBe(0)
+        expect(model.status).toBe('Playing')
+        expect(model.board).toEqual(generateBoard(123, 0))
       }),
     )
   })

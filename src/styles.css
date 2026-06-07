@@ -112,3 +112,31 @@ body {
   color: #fafafa;
   cursor: pointer;
 }
+
+.title-screen {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1.5rem;
+  padding: 2rem 1.25rem;
+  width: 100%;
+}
+
+.title-tagline {
+  margin: 0;
+  font-size: 1.125rem;
+  color: #444;
+}
+
+.start-run {
+  appearance: none;
+  border: none;
+  border-radius: 0.5rem;
+  padding: 1rem 1.75rem;
+  font: inherit;
+  font-size: 1.125rem;
+  font-weight: 600;
+  background: #111;
+  color: #fafafa;
+  cursor: pointer;
+}

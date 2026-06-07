@@ -20,7 +20,54 @@ const initialModel: Model = {
   status: 'Playing',
 }
 
+const titleModel: Model = { ...initialModel, status: 'Title' }
+
 describe('scene', () => {
+  test('app opens on the Title screen with a Tap to play affordance', () => {
+    Scene.scene(
+      { update, view },
+      Scene.with(titleModel),
+      Scene.expect(Scene.role('button', { name: 'Tap to play' })).toExist(),
+      Scene.expect(Scene.role('grid', { name: 'Board' })).not.toExist(),
+      Scene.expect(Scene.role('dialog', { name: 'Game Over' })).not.toExist(),
+    )
+  })
+
+  test('clicking Tap to play issues GenerateRunSeed and enters Playing', () => {
+    Scene.scene(
+      { update, view },
+      Scene.with(titleModel),
+      Scene.click(Scene.role('button', { name: 'Tap to play' })),
+      Scene.Command.expectExact(GenerateRunSeed),
+      Scene.Command.resolve(GenerateRunSeed, StartedNewRun({ seed: 7 })),
+      Scene.expect(Scene.role('button', { name: 'Tap to play' })).not.toExist(),
+      Scene.expect(Scene.role('grid', { name: 'Board' })).toExist(),
+      Scene.expect(Scene.label('Score')).toHaveText('0'),
+    )
+  })
+
+  test('full loop: Title to Playing to Game Over to Play again to Playing', () => {
+    const playingBoard = generateBoard(7, 0)
+    const nonTargetIndex = playingBoard.targetIndex === 0 ? 1 : playingBoard.targetIndex - 1
+
+    Scene.scene(
+      { update, view },
+      Scene.with(titleModel),
+      Scene.click(Scene.role('button', { name: 'Tap to play' })),
+      Scene.Command.expectExact(GenerateRunSeed),
+      Scene.Command.resolve(GenerateRunSeed, StartedNewRun({ seed: 7 })),
+      Scene.expect(Scene.role('grid', { name: 'Board' })).toExist(),
+      Scene.click(Scene.nth(Scene.all.role('gridcell'), nonTargetIndex)),
+      Scene.expect(Scene.role('dialog', { name: 'Game Over' })).toExist(),
+      Scene.click(Scene.role('button', { name: 'Play again' })),
+      Scene.Command.expectExact(GenerateRunSeed),
+      Scene.Command.resolve(GenerateRunSeed, StartedNewRun({ seed: 11 })),
+      Scene.expect(Scene.role('dialog', { name: 'Game Over' })).not.toExist(),
+      Scene.expect(Scene.role('grid', { name: 'Board' })).toExist(),
+      Scene.expect(Scene.label('Score')).toHaveText('0'),
+    )
+  })
+
   test('renders the game title', () => {
     Scene.scene(
       { update, view },

@@ -28,7 +28,8 @@ describe('Color', () => {
         const back = srgbToOklch(oklchToSrgb(color))
         expect(back.L).toBeCloseTo(color.L, 3)
         expect(back.C).toBeCloseTo(color.C, 3)
-        expect(((back.h - color.h + 540) % 360) - 180).toBeLessThan(APPROX_EPSILON)
+        const hueDiff = ((back.h - color.h + 540) % 360) - 180
+        expect(Math.abs(hueDiff)).toBeLessThan(APPROX_EPSILON)
       })
     })
 

@@ -1,15 +1,16 @@
-const HASH_OFFSET_BASIS = 2654435769
-const HASH_MIX_SHIFT_HIGH = 15
-const HASH_MIX_SHIFT_LOW = 16
-const HASH_MULTIPLIER_HIGH = 0x85ebca6b
-const HASH_MULTIPLIER_LOW = 0xc2b2ae35
+// Murmur3-style 32-bit finalizer multipliers, shared by the seed hash and the
+// per-step state mix.
+const FINALIZER_MULTIPLIER_FIRST = 0x85ebca6b
+const FINALIZER_MULTIPLIER_SECOND = 0xc2b2ae35
+
+const HASH_OFFSET_BASIS = 0x9e3779b9
+const HASH_MIX_SHIFT_FIRST = 15
+const HASH_MIX_SHIFT_SECOND = 16
 
 const STATE_STEP_DELTA = 0x9e3779b9
 const STATE_MIX_SHIFT_FIRST = 15
 const STATE_MIX_SHIFT_SECOND = 13
 const STATE_MIX_SHIFT_FINAL = 16
-const STATE_MIX_MULTIPLIER_FIRST = 0x85ebca6b
-const STATE_MIX_MULTIPLIER_SECOND = 0xc2b2ae35
 
 const UINT32_MAX_PLUS_ONE = 0x100000000
 
@@ -23,9 +24,9 @@ const toUint32 = (value: number): number => value >>> 0
 
 const hashSeed = (seed: number): number => {
   let mixed = toUint32(seed + HASH_OFFSET_BASIS)
-  mixed = Math.imul(mixed ^ (mixed >>> HASH_MIX_SHIFT_HIGH), HASH_MULTIPLIER_HIGH)
-  mixed = Math.imul(mixed ^ (mixed >>> HASH_MIX_SHIFT_LOW), HASH_MULTIPLIER_LOW)
-  return toUint32(mixed ^ (mixed >>> HASH_MIX_SHIFT_LOW))
+  mixed = Math.imul(mixed ^ (mixed >>> HASH_MIX_SHIFT_FIRST), FINALIZER_MULTIPLIER_FIRST)
+  mixed = Math.imul(mixed ^ (mixed >>> HASH_MIX_SHIFT_SECOND), FINALIZER_MULTIPLIER_SECOND)
+  return toUint32(mixed ^ (mixed >>> HASH_MIX_SHIFT_SECOND))
 }
 
 /**
@@ -38,11 +39,11 @@ const advance = (prng: Prng): { value: number; next: Prng } => {
   const stepped = toUint32(prng.state + STATE_STEP_DELTA)
   let mixed = Math.imul(
     stepped ^ (stepped >>> STATE_MIX_SHIFT_FIRST),
-    STATE_MIX_MULTIPLIER_FIRST,
+    FINALIZER_MULTIPLIER_FIRST,
   )
   mixed = Math.imul(
     mixed ^ (mixed >>> STATE_MIX_SHIFT_SECOND),
-    STATE_MIX_MULTIPLIER_SECOND,
+    FINALIZER_MULTIPLIER_SECOND,
   )
   const value = toUint32(mixed ^ (mixed >>> STATE_MIX_SHIFT_FINAL))
   return { value, next: { state: stepped } }

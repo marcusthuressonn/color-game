@@ -57,10 +57,10 @@ const drawBaseColor = (prng: Prng): readonly [OkLch, Prng] => {
 }
 
 const drawTargetColor = (base: OkLch, prng: Prng): readonly [OkLch, Prng] => {
-  const [direction, next] = nextFloat(prng)
-  const signed = direction < 0.5 ? -ROUND_DELTA : ROUND_DELTA
-  const candidate = offsetLightness(base, signed)
-  const target = isInGamut(candidate) ? candidate : offsetLightness(base, -signed)
+  const [coin, next] = nextFloat(prng)
+  const signedDelta = coin < 0.5 ? -ROUND_DELTA : ROUND_DELTA
+  const candidate = offsetLightness(base, signedDelta)
+  const target = isInGamut(candidate) ? candidate : offsetLightness(base, -signedDelta)
   return [target, next]
 }
 

@@ -1,7 +1,14 @@
 import { Match as M, Schema as S } from 'effect'
 import { Command, Runtime } from 'foldkit'
-import { Document, html } from 'foldkit/html'
+import { Document, Html, html } from 'foldkit/html'
 import { m } from 'foldkit/message'
+
+import {
+  BOARD_SIZE,
+  PLACEHOLDER_TILE_COLOR,
+  columnIndices,
+  rowIndices,
+} from './board'
 
 // MODEL
 
@@ -36,17 +43,46 @@ export const init: Runtime.ProgramInit<Model, Message> = () => [{}, []]
 
 // VIEW
 
-export const view = (_model: Model): Document => {
-  const h = html<Message>()
+const {
+  div,
+  h1,
+  Class,
+  Style,
+  Role,
+  AriaLabel,
+  AriaRowcount,
+  AriaColcount,
+} = html<Message>()
 
-  return {
-    title: 'Color Game',
-    body: h.div(
-      [h.Class('app')],
-      [
-        h.h1([h.Class('title')], ['Color Game']),
-        h.p([h.Class('tagline')], ['Find the odd shade.']),
-      ],
-    ),
-  }
-}
+const tileView = (): Html =>
+  div(
+    [
+      Role('gridcell'),
+      Class('tile'),
+      Style({ 'background-color': PLACEHOLDER_TILE_COLOR }),
+    ],
+    [],
+  )
+
+const rowView = (): Html =>
+  div([Role('row'), Class('board-row')], columnIndices.map(tileView))
+
+const boardView = (): Html =>
+  div(
+    [
+      Role('grid'),
+      AriaLabel('Board'),
+      AriaRowcount(BOARD_SIZE),
+      AriaColcount(BOARD_SIZE),
+      Class('board'),
+    ],
+    rowIndices.map(rowView),
+  )
+
+export const view = (_model: Model): Document => ({
+  title: 'Color Game',
+  body: div(
+    [Class('app')],
+    [h1([Class('title')], ['Color Game']), boardView()],
+  ),
+})

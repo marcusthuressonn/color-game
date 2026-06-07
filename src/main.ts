@@ -173,23 +173,22 @@ const titleView = (): Html =>
     ],
   )
 
-export const view = (model: Model): Document => {
-  const isTitle = model.status === 'Title'
-  const isGameOver = model.status === 'GameOver'
-  return {
-    title: 'Color Game',
-    body: div(
-      [Class('app')],
-      [
-        h1([Class('title')], ['Color Game']),
-        ...(isTitle
-          ? [titleView()]
-          : [
-              scoreView(model.score),
-              boardView(model.board, isGameOver),
-              ...(isGameOver ? [gameOverView(model.score)] : []),
-            ]),
-      ],
-    ),
-  }
-}
+const statusView = (model: Model): ReadonlyArray<Html> =>
+  M.value(model.status).pipe(
+    M.when('Title', () => [titleView()]),
+    M.when('Playing', () => [scoreView(model.score), boardView(model.board, false)]),
+    M.when('GameOver', () => [
+      scoreView(model.score),
+      boardView(model.board, true),
+      gameOverView(model.score),
+    ]),
+    M.exhaustive,
+  )
+
+export const view = (model: Model): Document => ({
+  title: 'Color Game',
+  body: div(
+    [Class('app')],
+    [h1([Class('title')], ['Color Game']), ...statusView(model)],
+  ),
+})

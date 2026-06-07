@@ -114,9 +114,7 @@ const tileView = (board: Board, index: number, isRevealed: boolean): Html =>
   div(
     [
       Role('gridcell'),
-      Class(
-        isRevealed && index === board.targetIndex ? 'tile tile-revealed' : 'tile',
-      ),
+      Class(isRevealed && index === board.targetIndex ? 'tile tile-revealed' : 'tile'),
       Style({ 'background-color': srgbToCss(oklchToSrgb(tileColorAt(board, index))) }),
       OnClick(TappedTile({ index })),
     ],
@@ -152,10 +150,7 @@ const gameOverView = (score: number): Html =>
     [
       h2([Class('game-over-title')], ['Game Over']),
       p([Class('game-over-score'), AriaLabel('Final Score')], [score.toString()]),
-      button(
-        [Class('play-again'), OnClick(ClickedPlayAgain())],
-        ['Play again'],
-      ),
+      button([Class('play-again'), OnClick(ClickedPlayAgain())], ['Play again']),
     ],
   )
 

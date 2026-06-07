@@ -62,7 +62,6 @@ describe('update', () => {
       Story.model(model => {
         expect(model.status).toBe('GameOver')
         expect(model.board).toEqual(initialModel.board)
-        expect(model.board.targetIndex).toBe(initialModel.board.targetIndex)
         expect(model.score).toBe(0)
         expect(model.roundIndex).toBe(0)
       }),

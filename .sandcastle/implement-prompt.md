@@ -35,7 +35,12 @@ If applicable, use RGR to complete the task.
 
 # FEEDBACK LOOPS
 
-Before committing, run `pnpm run typecheck` and `pnpm run test` to ensure the tests pass.
+Before committing, review the code you wrote and ask, for each part: **is there an
+Effect-native way to solve this instead of a hand-rolled or platform one?** This codebase is
+built on Effect — reach for the library primitive before writing your own, and if you used a
+native primitive where Effect has one, replace it before committing.
+
+Then run `pnpm run typecheck` and `pnpm run test` to ensure the tests pass.
 
 # COMMIT
 

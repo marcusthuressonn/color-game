@@ -1,14 +1,9 @@
-import { Match as M, Schema as S } from 'effect'
+import { Array, Match as M, Schema as S } from 'effect'
 import { Command, Runtime } from 'foldkit'
 import { Document, Html, html } from 'foldkit/html'
 import { m } from 'foldkit/message'
 
-import {
-  BOARD_SIZE,
-  PLACEHOLDER_TILE_COLOR,
-  columnIndices,
-  rowIndices,
-} from './board'
+import { BOARD_SIZE, PLACEHOLDER_TILE_COLOR } from './board'
 
 // MODEL
 
@@ -65,7 +60,10 @@ const tileView = (): Html =>
   )
 
 const rowView = (): Html =>
-  div([Role('row'), Class('board-row')], columnIndices.map(tileView))
+  div(
+    [Role('row'), Class('board-row')],
+    Array.makeBy(BOARD_SIZE, () => tileView()),
+  )
 
 const boardView = (): Html =>
   div(
@@ -76,7 +74,7 @@ const boardView = (): Html =>
       AriaColcount(BOARD_SIZE),
       Class('board'),
     ],
-    rowIndices.map(rowView),
+    Array.makeBy(BOARD_SIZE, () => rowView()),
   )
 
 export const view = (_model: Model): Document => ({

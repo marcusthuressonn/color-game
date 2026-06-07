@@ -8,6 +8,8 @@ import {
   GenerateRunSeed,
   init,
   type Model,
+  RecordTapTime,
+  RecordedTap,
   StartedDailyRun,
   StartedNewRun,
   update,
@@ -32,6 +34,7 @@ const initialModel: Model = {
   runStartedAtMs: 0,
   totalTimeMs: 0,
   countdownMs: 0,
+  tapLog: [],
 }
 
 const titleModel: Model = { ...initialModel, status: 'Title' }
@@ -398,6 +401,10 @@ describe('scene', () => {
       { update, view },
       Scene.with(initialModel),
       Scene.click(Scene.nth(Scene.all.role('gridcell'), initialModel.board.targetIndex)),
+      Scene.Command.resolve(
+        RecordTapTime,
+        RecordedTap({ tap: { index: initialModel.board.targetIndex, tMs: 12 } }),
+      ),
       Scene.expect(Scene.label('Score')).toHaveText('1'),
     )
   })

@@ -33,6 +33,7 @@ import {
   saveBestScore,
   saveDailyRecord,
 } from './persistence'
+import { Tap, TapLog } from './replay'
 
 const INITIAL_SEED = 0xc010_4eed
 const INITIAL_ROUND_INDEX = 0
@@ -58,6 +59,7 @@ export const Model = S.Struct({
   runStartedAtMs: S.Number,
   totalTimeMs: S.Number,
   countdownMs: S.Number,
+  tapLog: TapLog,
 })
 export type Model = typeof Model.Type
 
@@ -111,6 +113,7 @@ export const TickedCountdown = m('TickedCountdown')
 export const DeterminedCountdownNow = m('DeterminedCountdownNow', {
   countdownMs: S.Number,
 })
+export const RecordedTap = m('RecordedTap', { tap: Tap })
 
 export const Message = S.Union([
   Booted,
@@ -123,6 +126,7 @@ export const Message = S.Union([
   CompletedSaveDailyRecord,
   TickedCountdown,
   DeterminedCountdownNow,
+  RecordedTap,
 ])
 export type Message = typeof Message.Type
 
@@ -199,6 +203,18 @@ export const DetermineCountdownNow = Command.define(
   ),
 )
 
+export const RecordTapTime = Command.define(
+  'RecordTapTime',
+  { index: S.Number, runStartedAtMs: S.Number },
+  RecordedTap,
+)(({ index, runStartedAtMs }) =>
+  DateTime.now.pipe(
+    Effect.map(now =>
+      RecordedTap({ tap: { index, tMs: DateTime.toEpochMillis(now) - runStartedAtMs } }),
+    ),
+  ),
+)
+
 // UPDATE
 
 const freshModel = (
@@ -227,6 +243,7 @@ const freshModel = (
   runStartedAtMs,
   totalTimeMs: 0,
   countdownMs,
+  tapLog: [],
 })
 
 const titleModel = (
@@ -255,6 +272,7 @@ const lockedDailyModel = (record: DailyRecord, best: number, countdownMs: number
   runStartedAtMs: 0,
   totalTimeMs: record.totalTimeMs,
   countdownMs,
+  tapLog: [],
 })
 
 const seedRunForMode = (mode: Mode): Command.Command<Message> =>
@@ -320,7 +338,7 @@ export const update = (
             board: generateBoard(model.seed, nextRoundIndex),
             score: model.score + 1,
           },
-          [],
+          [RecordTapTime({ index, runStartedAtMs: model.runStartedAtMs })],
         ]
       },
       ClickedSelectMode: ({ mode }) => [{ ...model, mode }, [seedRunForMode(mode)]],
@@ -357,6 +375,7 @@ export const update = (
       CompletedSaveDailyRecord: ({ totalTimeMs }) => [{ ...model, totalTimeMs }, []],
       TickedCountdown: () => [model, [DetermineCountdownNow()]],
       DeterminedCountdownNow: ({ countdownMs }) => [{ ...model, countdownMs }, []],
+      RecordedTap: ({ tap }) => [{ ...model, tapLog: [...model.tapLog, tap] }, []],
     }),
   )
 

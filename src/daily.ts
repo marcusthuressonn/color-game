@@ -112,3 +112,35 @@ export const compareDailyResults = (a: DailyResult, b: DailyResult): number =>
  */
 export const formatTotalTime = (totalTimeMs: number): string =>
   `${(totalTimeMs / 1000).toFixed(1)}s`
+
+/**
+ * Milliseconds remaining from `date` until the next local midnight. At local
+ * midnight itself, returns a full day's worth of milliseconds (the clock
+ * just rolled, so the next midnight is 24 hours away). Used to drive the
+ * Daily result-screen countdown.
+ */
+export const msUntilNextLocalMidnight = (date: Date): number => {
+  const nextMidnight = new Date(
+    date.getFullYear(),
+    date.getMonth(),
+    date.getDate() + 1,
+    0,
+    0,
+    0,
+    0,
+  )
+  return nextMidnight.getTime() - date.getTime()
+}
+
+/**
+ * Format a millisecond duration as a player-facing `HH:MM:SS` countdown.
+ * Negative or sub-second values clamp to `00:00:00`. Used to render the
+ * Daily result-screen "Next Daily in" countdown.
+ */
+export const formatCountdown = (ms: number): string => {
+  const clamped = Math.max(0, Math.floor(ms / 1000))
+  const hours = Math.floor(clamped / 3600)
+  const minutes = Math.floor((clamped % 3600) / 60)
+  const seconds = clamped % 60
+  return `${pad2(hours)}:${pad2(minutes)}:${pad2(seconds)}`
+}

@@ -7,7 +7,9 @@ import {
   dailyNumber,
   dailySeed,
   dayKey,
+  formatCountdown,
   formatTotalTime,
+  msUntilNextLocalMidnight,
   streakTransition,
 } from './daily'
 
@@ -215,5 +217,86 @@ describe('formatTotalTime', () => {
 
   test('rounds half-second boundaries to one decimal', () => {
     expect(formatTotalTime(1_550)).toBe('1.6s')
+  })
+})
+
+describe('msUntilNextLocalMidnight', () => {
+  const MS_PER_HOUR = 60 * 60 * 1000
+  const MS_PER_MINUTE = 60 * 1000
+
+  test('one hour before local midnight returns one hour in ms', () => {
+    expect(msUntilNextLocalMidnight(new Date(2026, 5, 7, 23, 0, 0, 0))).toBe(
+      MS_PER_HOUR,
+    )
+  })
+
+  test('at local midnight returns a full day in ms', () => {
+    expect(msUntilNextLocalMidnight(new Date(2026, 5, 7, 0, 0, 0, 0))).toBe(
+      24 * MS_PER_HOUR,
+    )
+  })
+
+  test('one second before local midnight returns one second in ms', () => {
+    expect(msUntilNextLocalMidnight(new Date(2026, 5, 7, 23, 59, 59, 0))).toBe(
+      1_000,
+    )
+  })
+
+  test('midday returns twelve hours in ms', () => {
+    expect(msUntilNextLocalMidnight(new Date(2026, 5, 7, 12, 0, 0, 0))).toBe(
+      12 * MS_PER_HOUR,
+    )
+  })
+
+  test('two minutes before local midnight returns two minutes in ms', () => {
+    expect(msUntilNextLocalMidnight(new Date(2026, 5, 7, 23, 58, 0, 0))).toBe(
+      2 * MS_PER_MINUTE,
+    )
+  })
+
+  test('crosses a month boundary correctly', () => {
+    expect(msUntilNextLocalMidnight(new Date(2026, 0, 31, 23, 30, 0, 0))).toBe(
+      30 * MS_PER_MINUTE,
+    )
+  })
+
+  test('returns a strictly positive value for any moment within a local day', () => {
+    Array.makeBy(24, hour => hour).forEach(hour => {
+      const sample = new Date(2026, 5, 7, hour, 17, 0, 0)
+      expect(msUntilNextLocalMidnight(sample)).toBeGreaterThan(0)
+      expect(msUntilNextLocalMidnight(sample)).toBeLessThanOrEqual(
+        24 * MS_PER_HOUR,
+      )
+    })
+  })
+})
+
+describe('formatCountdown', () => {
+  test('formats an hours/minutes/seconds duration as HH:MM:SS', () => {
+    const oneHour = 60 * 60 * 1000
+    const oneMinute = 60 * 1000
+    expect(formatCountdown(2 * oneHour + 34 * oneMinute + 56 * 1000)).toBe(
+      '02:34:56',
+    )
+  })
+
+  test('zero-pads single-digit hours, minutes, and seconds', () => {
+    expect(formatCountdown(9 * 1000)).toBe('00:00:09')
+  })
+
+  test('renders zero as 00:00:00', () => {
+    expect(formatCountdown(0)).toBe('00:00:00')
+  })
+
+  test('clamps negative durations to 00:00:00', () => {
+    expect(formatCountdown(-5_000)).toBe('00:00:00')
+  })
+
+  test('floors sub-second remainder', () => {
+    expect(formatCountdown(1_999)).toBe('00:00:01')
+  })
+
+  test('formats a full day as 24:00:00', () => {
+    expect(formatCountdown(24 * 60 * 60 * 1000)).toBe('24:00:00')
   })
 })

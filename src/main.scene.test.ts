@@ -31,6 +31,7 @@ const initialModel: Model = {
   lastPlayedDayKey: '',
   runStartedAtMs: 0,
   totalTimeMs: 0,
+  nowMs: 0,
 }
 
 const titleModel: Model = { ...initialModel, status: 'Title' }
@@ -157,6 +158,102 @@ describe('scene', () => {
     )
   })
 
+  test('Daily Game Over surfaces a Next Daily countdown derived from nowMs', () => {
+    const dailyGameOverModel: Model = {
+      ...initialModel,
+      status: 'GameOver',
+      mode: 'Daily',
+      score: 4,
+      dailyNumber: 158,
+      dailyDayKey: '2026-06-07',
+      streak: 5,
+      lastPlayedDayKey: '2026-06-07',
+      totalTimeMs: 12_345,
+      nowMs: new Date(2026, 5, 7, 21, 25, 4, 0).getTime(),
+    }
+
+    Scene.scene(
+      { update, view },
+      Scene.with(dailyGameOverModel),
+      Scene.expect(Scene.label('Next Daily')).toHaveText('02:34:56'),
+    )
+  })
+
+  test('Daily Game Over surfaces a Play Classic nudge button', () => {
+    const dailyGameOverModel: Model = {
+      ...initialModel,
+      status: 'GameOver',
+      mode: 'Daily',
+      score: 4,
+      dailyNumber: 158,
+      dailyDayKey: '2026-06-07',
+      streak: 5,
+      lastPlayedDayKey: '2026-06-07',
+      nowMs: new Date(2026, 5, 7, 21, 0, 0, 0).getTime(),
+    }
+
+    Scene.scene(
+      { update, view },
+      Scene.with(dailyGameOverModel),
+      Scene.expect(Scene.role('button', { name: 'Play Classic' })).toExist(),
+    )
+  })
+
+  test('clicking the Play Classic nudge issues GenerateRunSeed and enters a Classic Run', () => {
+    const dailyGameOverModel: Model = {
+      ...initialModel,
+      status: 'GameOver',
+      mode: 'Daily',
+      score: 4,
+      dailyNumber: 158,
+      dailyDayKey: '2026-06-07',
+      streak: 5,
+      lastPlayedDayKey: '2026-06-07',
+      nowMs: new Date(2026, 5, 7, 21, 0, 0, 0).getTime(),
+    }
+
+    Scene.scene(
+      { update, view },
+      Scene.with(dailyGameOverModel),
+      Scene.click(Scene.role('button', { name: 'Play Classic' })),
+      Scene.Command.expectExact(GenerateRunSeed),
+      Scene.Command.resolve(GenerateRunSeed, StartedNewRun({ seed: 13 })),
+      Scene.expect(Scene.label('Mode')).toHaveText('Classic'),
+      Scene.expect(Scene.role('grid', { name: 'Board' })).toExist(),
+    )
+  })
+
+  test('Classic Game Over does not surface a Next Daily countdown', () => {
+    const classicGameOverModel: Model = {
+      ...initialModel,
+      status: 'GameOver',
+      mode: 'Classic',
+      score: 4,
+      nowMs: new Date(2026, 5, 7, 21, 0, 0, 0).getTime(),
+    }
+
+    Scene.scene(
+      { update, view },
+      Scene.with(classicGameOverModel),
+      Scene.expect(Scene.label('Next Daily')).not.toExist(),
+    )
+  })
+
+  test('Classic Game Over does not surface a Play Classic nudge button', () => {
+    const classicGameOverModel: Model = {
+      ...initialModel,
+      status: 'GameOver',
+      mode: 'Classic',
+      score: 4,
+    }
+
+    Scene.scene(
+      { update, view },
+      Scene.with(classicGameOverModel),
+      Scene.expect(Scene.role('button', { name: 'Play Classic' })).not.toExist(),
+    )
+  })
+
   test('Classic Game Over does not surface a Streak', () => {
     const classicGameOverModel: Model = {
       ...initialModel,
@@ -187,6 +284,7 @@ describe('scene', () => {
       }),
       prevStreak: 4,
       prevLastPlayedDayKey: Option.some('2026-06-07'),
+      initialNowMs: new Date(2026, 5, 7, 22, 0, 0, 0).getTime(),
     })
 
     Scene.scene(
@@ -198,6 +296,8 @@ describe('scene', () => {
       Scene.expect(Scene.label('Daily Number')).toHaveText('#158'),
       Scene.expect(Scene.label('Streak')).toHaveText('4'),
       Scene.expect(Scene.label('Total Time')).toHaveText('31.5s'),
+      Scene.expect(Scene.label('Next Daily')).toHaveText('02:00:00'),
+      Scene.expect(Scene.role('button', { name: 'Play Classic' })).toExist(),
       Scene.expect(Scene.role('button', { name: 'Play again' })).not.toExist(),
       Scene.expect(Scene.role('button', { name: 'Classic' })).not.toExist(),
       Scene.expect(Scene.role('button', { name: 'Daily' })).not.toExist(),
@@ -210,6 +310,7 @@ describe('scene', () => {
       maybeLockedDaily: Option.none(),
       prevStreak: 0,
       prevLastPlayedDayKey: Option.none(),
+      initialNowMs: 0,
     })
 
     Scene.scene(

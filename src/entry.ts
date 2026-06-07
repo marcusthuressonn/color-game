@@ -1,6 +1,15 @@
 import { Runtime } from 'foldkit'
 
-import { Flags, Message, Model, flags, init, update, view } from './main'
+import {
+  Flags,
+  Message,
+  Model,
+  flags,
+  init,
+  subscriptions,
+  update,
+  view,
+} from './main'
 
 const program = Runtime.makeProgram({
   Model,
@@ -9,6 +18,7 @@ const program = Runtime.makeProgram({
   init,
   update,
   view,
+  subscriptions,
   container: document.getElementById('root'),
   devTools: {
     Message,

@@ -12,6 +12,8 @@ import {
   ClickedSelectMode,
   CompletedSaveBestScore,
   CompletedSaveDailyRecord,
+  DetermineCountdownNow,
+  DeterminedCountdownNow,
   flags,
   GenerateDailySeed,
   GenerateRunSeed,
@@ -22,6 +24,7 @@ import {
   StartedDailyRun,
   StartedNewRun,
   TappedTile,
+  TickedCountdown,
   update,
 } from './main'
 import { saveDailyRecord } from './persistence'
@@ -43,6 +46,7 @@ const initialModel: Model = {
   lastPlayedDayKey: '',
   runStartedAtMs: 0,
   totalTimeMs: 0,
+  nowMs: 0,
 }
 
 describe('update', () => {
@@ -443,6 +447,77 @@ describe('update', () => {
     )
   })
 
+  test('TickedCountdown issues a DetermineCountdownNow Command and leaves the model unchanged', () => {
+    const dailyGameOver: Model = {
+      ...initialModel,
+      mode: 'Daily',
+      status: 'GameOver',
+      dailyNumber: 158,
+      dailyDayKey: '2026-06-07',
+      nowMs: 1_000,
+    }
+
+    Story.story(
+      update,
+      Story.with(dailyGameOver),
+      Story.message(TickedCountdown()),
+      Story.Command.expectExact(DetermineCountdownNow),
+      Story.model(model => {
+        expect(model).toEqual(dailyGameOver)
+      }),
+      Story.Command.resolve(
+        DetermineCountdownNow,
+        DeterminedCountdownNow({ nowMs: 1_700_000_000_000 }),
+      ),
+    )
+  })
+
+  test('DeterminedCountdownNow writes the resolved nowMs onto the Model', () => {
+    const dailyGameOver: Model = {
+      ...initialModel,
+      mode: 'Daily',
+      status: 'GameOver',
+      dailyNumber: 158,
+      dailyDayKey: '2026-06-07',
+      nowMs: 1_000,
+    }
+
+    Story.story(
+      update,
+      Story.with(dailyGameOver),
+      Story.message(DeterminedCountdownNow({ nowMs: 1_700_000_000_000 })),
+      Story.Command.expectNone(),
+      Story.model(model => {
+        expect(model.nowMs).toBe(1_700_000_000_000)
+      }),
+    )
+  })
+
+  test('StartedDailyRun preserves the Model nowMs across the Run boundary', () => {
+    const dailyTitle: Model = {
+      ...initialModel,
+      status: 'Title',
+      mode: 'Daily',
+      nowMs: 1_700_000_000_000,
+    }
+
+    Story.story(
+      update,
+      Story.with(dailyTitle),
+      Story.message(
+        StartedDailyRun({
+          seed: 1,
+          dailyNumber: 158,
+          dayKey: '2026-06-07',
+          startedAtMs: 1_700_000_000_000,
+        }),
+      ),
+      Story.model(model => {
+        expect(model.nowMs).toBe(1_700_000_000_000)
+      }),
+    )
+  })
+
   test('CompletedSaveDailyRecord writes the captured Total Time onto the Model', () => {
     const dailyGameOver: Model = {
       ...initialModel,
@@ -509,6 +584,7 @@ describe('update', () => {
       maybeLockedDaily: Option.none(),
       prevStreak: 0,
       prevLastPlayedDayKey: Option.none(),
+      initialNowMs: 0,
     })
     expect(model.status).toBe('Title')
     expect(model.best).toBe(5)
@@ -524,6 +600,7 @@ describe('update', () => {
       maybeLockedDaily: Option.none(),
       prevStreak: 4,
       prevLastPlayedDayKey: Option.some('2026-06-05'),
+      initialNowMs: 0,
     })
     expect(model.status).toBe('Title')
     expect(model.streak).toBe(4)
@@ -543,6 +620,7 @@ describe('update', () => {
       }),
       prevStreak: 7,
       prevLastPlayedDayKey: Option.some('2026-06-07'),
+      initialNowMs: 1_000_000,
     })
     expect(model.status).toBe('GameOver')
     expect(model.mode).toBe('Daily')
@@ -741,5 +819,13 @@ describe('flags', () => {
     const result = await Effect.runPromise(flags)
     expect(result.prevStreak).toBe(0)
     expect(result.prevLastPlayedDayKey).toStrictEqual(Option.none())
+  })
+
+  test('captures the boot-time wall clock in initialNowMs', async () => {
+    const before = Date.now()
+    const result = await Effect.runPromise(flags)
+    const after = Date.now()
+    expect(result.initialNowMs).toBeGreaterThanOrEqual(before)
+    expect(result.initialNowMs).toBeLessThanOrEqual(after)
   })
 })

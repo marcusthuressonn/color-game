@@ -1,6 +1,16 @@
 import { BrowserKeyValueStore } from '@effect/platform-browser'
-import { Array, Clock, Effect, Match as M, Option, Random, Schema as S } from 'effect'
-import { Command, Runtime } from 'foldkit'
+import {
+  Array,
+  Clock,
+  Duration,
+  Effect,
+  Match as M,
+  Option,
+  Random,
+  Schema as S,
+  Stream,
+} from 'effect'
+import { Command, Runtime, Subscription } from 'foldkit'
 import { Document, Html, html } from 'foldkit/html'
 import { m } from 'foldkit/message'
 
@@ -10,7 +20,9 @@ import {
   dailyNumber,
   dailySeed,
   dayKey,
+  formatCountdown,
   formatTotalTime,
+  msUntilNextLocalMidnight,
   streakTransition,
 } from './daily'
 import { Mode } from './mode'
@@ -45,6 +57,7 @@ export const Model = S.Struct({
   lastPlayedDayKey: S.String,
   runStartedAtMs: S.Number,
   totalTimeMs: S.Number,
+  nowMs: S.Number,
 })
 export type Model = typeof Model.Type
 
@@ -55,19 +68,22 @@ export const Flags = S.Struct({
   maybeLockedDaily: S.Option(DailyRecord),
   prevStreak: S.Number,
   prevLastPlayedDayKey: S.Option(S.String),
+  initialNowMs: S.Number,
 })
 export type Flags = typeof Flags.Type
 
 export const flags: Effect.Effect<Flags> = Effect.gen(function* () {
   const maybeBest = yield* loadBestScore
   const maybeRecord = yield* loadDailyRecord
-  const today = dayKey(new Date(yield* Clock.currentTimeMillis))
+  const initialNowMs = yield* Clock.currentTimeMillis
+  const today = dayKey(new Date(initialNowMs))
   const maybeLockedDaily = Option.filter(maybeRecord, record => record.dayKey === today)
   return Flags.make({
     best: Option.getOrElse(maybeBest, () => 0),
     maybeLockedDaily,
     prevStreak: Option.match(maybeRecord, { onNone: () => 0, onSome: record => record.streak }),
     prevLastPlayedDayKey: Option.map(maybeRecord, record => record.dayKey),
+    initialNowMs,
   })
 }).pipe(Effect.provide(BrowserKeyValueStore.layerLocalStorage))
 
@@ -88,6 +104,10 @@ export const CompletedSaveBestScore = m('CompletedSaveBestScore')
 export const CompletedSaveDailyRecord = m('CompletedSaveDailyRecord', {
   totalTimeMs: S.Number,
 })
+export const TickedCountdown = m('TickedCountdown')
+export const DeterminedCountdownNow = m('DeterminedCountdownNow', {
+  nowMs: S.Number,
+})
 
 export const Message = S.Union([
   Booted,
@@ -98,6 +118,8 @@ export const Message = S.Union([
   StartedDailyRun,
   CompletedSaveBestScore,
   CompletedSaveDailyRecord,
+  TickedCountdown,
+  DeterminedCountdownNow,
 ])
 export type Message = typeof Message.Type
 
@@ -163,6 +185,15 @@ export const SaveDailyRecord = Command.define(
   }).pipe(Effect.provide(BrowserKeyValueStore.layerLocalStorage)),
 )
 
+export const DetermineCountdownNow = Command.define(
+  'DetermineCountdownNow',
+  DeterminedCountdownNow,
+)(
+  Clock.currentTimeMillis.pipe(
+    Effect.map(nowMs => DeterminedCountdownNow({ nowMs })),
+  ),
+)
+
 // UPDATE
 
 const freshModel = (
@@ -174,6 +205,7 @@ const freshModel = (
   streak: number,
   lastPlayedDayKey: string,
   runStartedAtMs: number,
+  nowMs: number,
 ): Model => ({
   seed,
   roundIndex: INITIAL_ROUND_INDEX,
@@ -189,18 +221,20 @@ const freshModel = (
   lastPlayedDayKey,
   runStartedAtMs,
   totalTimeMs: 0,
+  nowMs,
 })
 
 const titleModel = (
   best: number,
   streak: number,
   lastPlayedDayKey: string,
+  nowMs: number,
 ): Model => ({
-  ...freshModel(INITIAL_SEED, best, 'Classic', 0, '', streak, lastPlayedDayKey, 0),
+  ...freshModel(INITIAL_SEED, best, 'Classic', 0, '', streak, lastPlayedDayKey, 0, nowMs),
   status: 'Title',
 })
 
-const lockedDailyModel = (record: DailyRecord, best: number): Model => ({
+const lockedDailyModel = (record: DailyRecord, best: number, nowMs: number): Model => ({
   seed: record.seed,
   roundIndex: record.score,
   board: generateBoard(record.seed, record.score),
@@ -215,6 +249,7 @@ const lockedDailyModel = (record: DailyRecord, best: number): Model => ({
   lastPlayedDayKey: record.dayKey,
   runStartedAtMs: 0,
   totalTimeMs: record.totalTimeMs,
+  nowMs,
 })
 
 const seedRunForMode = (mode: Mode): Command.Command<Message> =>
@@ -286,7 +321,17 @@ export const update = (
       ClickedSelectMode: ({ mode }) => [{ ...model, mode }, [seedRunForMode(mode)]],
       ClickedPlayAgain: () => [model, [seedRunForMode(model.mode)]],
       StartedNewRun: ({ seed }) => [
-        freshModel(seed, model.best, model.mode, 0, '', model.streak, model.lastPlayedDayKey, 0),
+        freshModel(
+          seed,
+          model.best,
+          model.mode,
+          0,
+          '',
+          model.streak,
+          model.lastPlayedDayKey,
+          0,
+          model.nowMs,
+        ),
         [],
       ],
       StartedDailyRun: ({ seed, dailyNumber, dayKey, startedAtMs }) => [
@@ -299,11 +344,14 @@ export const update = (
           model.streak,
           model.lastPlayedDayKey,
           startedAtMs,
+          model.nowMs,
         ),
         [],
       ],
       CompletedSaveBestScore: () => [model, []],
       CompletedSaveDailyRecord: ({ totalTimeMs }) => [{ ...model, totalTimeMs }, []],
+      TickedCountdown: () => [model, [DetermineCountdownNow()]],
+      DeterminedCountdownNow: ({ nowMs }) => [{ ...model, nowMs }, []],
     }),
   )
 
@@ -314,14 +362,43 @@ export const init: Runtime.ProgramInit<Model, Message, Flags> = ({
   maybeLockedDaily,
   prevStreak,
   prevLastPlayedDayKey,
+  initialNowMs,
 }) =>
   Option.match(maybeLockedDaily, {
     onNone: () => [
-      titleModel(best, prevStreak, Option.getOrElse(prevLastPlayedDayKey, () => '')),
+      titleModel(
+        best,
+        prevStreak,
+        Option.getOrElse(prevLastPlayedDayKey, () => ''),
+        initialNowMs,
+      ),
       [],
     ],
-    onSome: record => [lockedDailyModel(record, best), []],
+    onSome: record => [lockedDailyModel(record, best, initialNowMs), []],
   })
+
+// SUBSCRIPTION
+
+const COUNTDOWN_TICK_INTERVAL_MS = 1_000
+
+const isDailyResult = (model: Model): boolean =>
+  model.status === 'GameOver' && model.mode === 'Daily'
+
+export const subscriptions = Subscription.make<Model, Message>()(entry => ({
+  countdownTick: entry(
+    { isDailyResult: S.Boolean },
+    {
+      modelToDependencies: model => ({ isDailyResult: isDailyResult(model) }),
+      dependenciesToStream: ({ isDailyResult }) =>
+        Stream.when(
+          Stream.tick(Duration.millis(COUNTDOWN_TICK_INTERVAL_MS)).pipe(
+            Stream.map(TickedCountdown),
+          ),
+          Effect.sync(() => isDailyResult),
+        ),
+    },
+  ),
+}))
 
 // VIEW
 
@@ -392,6 +469,18 @@ const streakView = (streak: number): Html =>
 const totalTimeView = (totalTimeMs: number): Html =>
   p([Class('total-time'), AriaLabel('Total Time')], [formatTotalTime(totalTimeMs)])
 
+const nextDailyCountdownView = (nowMs: number): Html =>
+  p(
+    [Class('next-daily'), AriaLabel('Next Daily')],
+    [formatCountdown(msUntilNextLocalMidnight(new Date(nowMs)))],
+  )
+
+const classicNudgeButton = (): Html =>
+  button(
+    [Class('classic-nudge'), OnClick(ClickedSelectMode({ mode: 'Classic' }))],
+    ['Play Classic'],
+  )
+
 const gameOverView = (
   score: number,
   best: number,
@@ -399,6 +488,7 @@ const gameOverView = (
   mode: Mode,
   streak: number,
   totalTimeMs: number,
+  nowMs: number,
 ): Html =>
   div(
     [Role('dialog'), AriaLabel('Game Over'), Class('game-over')],
@@ -408,7 +498,12 @@ const gameOverView = (
       bestScoreView(best),
       ...(isNewBest ? [newBestFlourish()] : []),
       ...(mode === 'Daily'
-        ? [streakView(streak), totalTimeView(totalTimeMs)]
+        ? [
+            streakView(streak),
+            totalTimeView(totalTimeMs),
+            nextDailyCountdownView(nowMs),
+            classicNudgeButton(),
+          ]
         : [playAgainButton()]),
     ],
   )
@@ -459,6 +554,7 @@ const statusView = (model: Model): ReadonlyArray<Html> =>
         model.mode,
         model.streak,
         model.totalTimeMs,
+        model.nowMs,
       ),
     ]),
     M.exhaustive,

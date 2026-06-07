@@ -256,3 +256,21 @@ body {
   font-weight: 500;
   color: #666;
 }
+
+.next-daily {
+  margin: 0;
+  font-size: 1rem;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  color: #111;
+}
+
+.next-daily::before {
+  content: 'Next Daily ';
+  font-weight: 500;
+  color: #666;
+}
+
+.classic-nudge {
+  margin-top: 0.5rem;
+}

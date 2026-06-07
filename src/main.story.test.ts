@@ -5,7 +5,7 @@ import { generateBoard } from './board'
 import {
   Booted,
   ClickedPlayAgain,
-  ClickedStartRun,
+  ClickedSelectMode,
   CompletedSaveBestScore,
   GenerateRunSeed,
   type Model,
@@ -25,6 +25,7 @@ const initialModel: Model = {
   status: 'Playing',
   best: 0,
   isNewBest: false,
+  mode: 'Classic',
 }
 
 describe('update', () => {
@@ -101,24 +102,81 @@ describe('update', () => {
     )
   })
 
-  test('ClickedStartRun from the Title screen issues GenerateRunSeed and leaves the model unchanged', () => {
+  test('ClickedSelectMode(Classic) sets the Mode to Classic, issues GenerateRunSeed, and routes to Playing', () => {
     const titleModel: Model = { ...initialModel, status: 'Title' }
 
     Story.story(
       update,
       Story.with(titleModel),
-      Story.message(ClickedStartRun()),
+      Story.message(ClickedSelectMode({ mode: 'Classic' })),
       Story.Command.expectExact(GenerateRunSeed),
       Story.model(model => {
-        expect(model).toEqual(titleModel)
+        expect(model.mode).toBe('Classic')
+        expect(model.status).toBe('Title')
       }),
       Story.Command.resolve(GenerateRunSeed, StartedNewRun({ seed: 123 })),
       Story.model(model => {
+        expect(model.mode).toBe('Classic')
         expect(model.seed).toBe(123)
-        expect(model.roundIndex).toBe(0)
-        expect(model.score).toBe(0)
         expect(model.status).toBe('Playing')
         expect(model.board).toEqual(generateBoard(123, 0))
+      }),
+    )
+  })
+
+  test('ClickedSelectMode(Daily) sets the Mode to Daily, issues GenerateRunSeed, and routes to Playing', () => {
+    const titleModel: Model = { ...initialModel, status: 'Title' }
+
+    Story.story(
+      update,
+      Story.with(titleModel),
+      Story.message(ClickedSelectMode({ mode: 'Daily' })),
+      Story.Command.expectExact(GenerateRunSeed),
+      Story.model(model => {
+        expect(model.mode).toBe('Daily')
+        expect(model.status).toBe('Title')
+      }),
+      Story.Command.resolve(GenerateRunSeed, StartedNewRun({ seed: 456 })),
+      Story.model(model => {
+        expect(model.mode).toBe('Daily')
+        expect(model.seed).toBe(456)
+        expect(model.status).toBe('Playing')
+      }),
+    )
+  })
+
+  test('StartedNewRun preserves the chosen Mode', () => {
+    const dailyTitle: Model = { ...initialModel, status: 'Title', mode: 'Daily' }
+
+    Story.story(
+      update,
+      Story.with(dailyTitle),
+      Story.message(StartedNewRun({ seed: 999 })),
+      Story.model(model => {
+        expect(model.mode).toBe('Daily')
+        expect(model.status).toBe('Playing')
+      }),
+    )
+  })
+
+  test('ClickedPlayAgain after a Daily Run preserves the Daily Mode through the reset', () => {
+    const dailyGameOver: Model = {
+      ...initialModel,
+      mode: 'Daily',
+      status: 'GameOver',
+      score: 4,
+    }
+
+    Story.story(
+      update,
+      Story.with(dailyGameOver),
+      Story.message(ClickedPlayAgain()),
+      Story.Command.expectExact(GenerateRunSeed),
+      Story.Command.resolve(GenerateRunSeed, StartedNewRun({ seed: 21 })),
+      Story.model(model => {
+        expect(model.mode).toBe('Daily')
+        expect(model.status).toBe('Playing')
+        expect(model.score).toBe(0)
       }),
     )
   })

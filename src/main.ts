@@ -6,6 +6,7 @@ import { m } from 'foldkit/message'
 
 import { Board, generateBoard } from './board'
 import { type OkLch, oklchToSrgb, srgbToCss } from './color'
+import { Mode } from './mode'
 import { loadBestScore, saveBestScore } from './persistence'
 
 const INITIAL_SEED = 0xc010_4eed
@@ -24,6 +25,7 @@ export const Model = S.Struct({
   status: Status,
   best: S.Number,
   isNewBest: S.Boolean,
+  mode: Mode,
 })
 export type Model = typeof Model.Type
 
@@ -45,7 +47,7 @@ export const flags: Effect.Effect<Flags> = loadBestScore.pipe(
 
 export const Booted = m('Booted')
 export const TappedTile = m('TappedTile', { index: S.Number })
-export const ClickedStartRun = m('ClickedStartRun')
+export const ClickedSelectMode = m('ClickedSelectMode', { mode: Mode })
 export const ClickedPlayAgain = m('ClickedPlayAgain')
 export const StartedNewRun = m('StartedNewRun', { seed: S.Number })
 export const CompletedSaveBestScore = m('CompletedSaveBestScore')
@@ -53,7 +55,7 @@ export const CompletedSaveBestScore = m('CompletedSaveBestScore')
 export const Message = S.Union([
   Booted,
   TappedTile,
-  ClickedStartRun,
+  ClickedSelectMode,
   ClickedPlayAgain,
   StartedNewRun,
   CompletedSaveBestScore,
@@ -80,7 +82,7 @@ export const SaveBestScore = Command.define(
 
 // UPDATE
 
-const freshModel = (seed: number, best: number): Model => ({
+const freshModel = (seed: number, best: number, mode: Mode): Model => ({
   seed,
   roundIndex: INITIAL_ROUND_INDEX,
   board: generateBoard(seed, INITIAL_ROUND_INDEX),
@@ -88,10 +90,11 @@ const freshModel = (seed: number, best: number): Model => ({
   status: 'Playing',
   best,
   isNewBest: false,
+  mode,
 })
 
 const titleModel = (best: number): Model => ({
-  ...freshModel(INITIAL_SEED, best),
+  ...freshModel(INITIAL_SEED, best, 'Classic'),
   status: 'Title',
 })
 
@@ -130,9 +133,9 @@ export const update = (
           [],
         ]
       },
-      ClickedStartRun: () => [model, [GenerateRunSeed()]],
+      ClickedSelectMode: ({ mode }) => [{ ...model, mode }, [GenerateRunSeed()]],
       ClickedPlayAgain: () => [model, [GenerateRunSeed()]],
-      StartedNewRun: ({ seed }) => [freshModel(seed, model.best), []],
+      StartedNewRun: ({ seed }) => [freshModel(seed, model.best, model.mode), []],
       CompletedSaveBestScore: () => [model, []],
     }),
   )
@@ -216,21 +219,41 @@ const gameOverView = (score: number, best: number, isNewBest: boolean): Html =>
     ],
   )
 
+const modeView = (mode: Mode): Html =>
+  p([Class('mode'), AriaLabel('Mode')], [mode])
+
 const titleView = (best: number): Html =>
   div(
     [Class('title-screen')],
     [
       p([Class('title-tagline')], ['Find the odd tile.']),
       bestScoreView(best),
-      button([Class('start-run'), OnClick(ClickedStartRun())], ['Tap to play']),
+      div(
+        [Class('mode-select'), Role('group'), AriaLabel('Choose a Mode')],
+        [
+          button(
+            [Class('start-run'), OnClick(ClickedSelectMode({ mode: 'Classic' }))],
+            ['Classic'],
+          ),
+          button(
+            [Class('start-run'), OnClick(ClickedSelectMode({ mode: 'Daily' }))],
+            ['Daily'],
+          ),
+        ],
+      ),
     ],
   )
 
 const statusView = (model: Model): ReadonlyArray<Html> =>
   M.value(model.status).pipe(
     M.when('Title', () => [titleView(model.best)]),
-    M.when('Playing', () => [scoreView(model.score), boardView(model.board, false)]),
+    M.when('Playing', () => [
+      modeView(model.mode),
+      scoreView(model.score),
+      boardView(model.board, false),
+    ]),
     M.when('GameOver', () => [
+      modeView(model.mode),
       scoreView(model.score),
       boardView(model.board, true),
       gameOverView(model.score, model.best, model.isNewBest),

@@ -20,42 +20,59 @@ const initialModel: Model = {
   status: 'Playing',
   best: 0,
   isNewBest: false,
+  mode: 'Classic',
 }
 
 const titleModel: Model = { ...initialModel, status: 'Title' }
 
 describe('scene', () => {
-  test('app opens on the Title screen with a Tap to play affordance', () => {
+  test('app opens on the Mode-select surface with Classic and Daily affordances', () => {
     Scene.scene(
       { update, view },
       Scene.with(titleModel),
-      Scene.expect(Scene.role('button', { name: 'Tap to play' })).toExist(),
+      Scene.expect(Scene.role('button', { name: 'Classic' })).toExist(),
+      Scene.expect(Scene.role('button', { name: 'Daily' })).toExist(),
       Scene.expect(Scene.role('grid', { name: 'Board' })).not.toExist(),
       Scene.expect(Scene.role('dialog', { name: 'Game Over' })).not.toExist(),
     )
   })
 
-  test('clicking Tap to play issues GenerateRunSeed and enters Playing', () => {
+  test('clicking Classic issues GenerateRunSeed and enters a Classic Playing Run', () => {
     Scene.scene(
       { update, view },
       Scene.with(titleModel),
-      Scene.click(Scene.role('button', { name: 'Tap to play' })),
+      Scene.click(Scene.role('button', { name: 'Classic' })),
       Scene.Command.expectExact(GenerateRunSeed),
       Scene.Command.resolve(GenerateRunSeed, StartedNewRun({ seed: 7 })),
-      Scene.expect(Scene.role('button', { name: 'Tap to play' })).not.toExist(),
+      Scene.expect(Scene.role('button', { name: 'Classic' })).not.toExist(),
       Scene.expect(Scene.role('grid', { name: 'Board' })).toExist(),
       Scene.expect(Scene.label('Score')).toHaveText('0'),
+      Scene.expect(Scene.label('Mode')).toHaveText('Classic'),
     )
   })
 
-  test('full loop: Title to Playing to Game Over to Play again to Playing', () => {
+  test('clicking Daily issues GenerateRunSeed and enters a Daily Playing Run', () => {
+    Scene.scene(
+      { update, view },
+      Scene.with(titleModel),
+      Scene.click(Scene.role('button', { name: 'Daily' })),
+      Scene.Command.expectExact(GenerateRunSeed),
+      Scene.Command.resolve(GenerateRunSeed, StartedNewRun({ seed: 7 })),
+      Scene.expect(Scene.role('button', { name: 'Daily' })).not.toExist(),
+      Scene.expect(Scene.role('grid', { name: 'Board' })).toExist(),
+      Scene.expect(Scene.label('Score')).toHaveText('0'),
+      Scene.expect(Scene.label('Mode')).toHaveText('Daily'),
+    )
+  })
+
+  test('full loop: Title to Classic Playing to Game Over to Play again to Playing', () => {
     const playingBoard = generateBoard(7, 0)
     const nonTargetIndex = playingBoard.targetIndex === 0 ? 1 : playingBoard.targetIndex - 1
 
     Scene.scene(
       { update, view },
       Scene.with(titleModel),
-      Scene.click(Scene.role('button', { name: 'Tap to play' })),
+      Scene.click(Scene.role('button', { name: 'Classic' })),
       Scene.Command.expectExact(GenerateRunSeed),
       Scene.Command.resolve(GenerateRunSeed, StartedNewRun({ seed: 7 })),
       Scene.expect(Scene.role('grid', { name: 'Board' })).toExist(),
@@ -67,6 +84,7 @@ describe('scene', () => {
       Scene.expect(Scene.role('dialog', { name: 'Game Over' })).not.toExist(),
       Scene.expect(Scene.role('grid', { name: 'Board' })).toExist(),
       Scene.expect(Scene.label('Score')).toHaveText('0'),
+      Scene.expect(Scene.label('Mode')).toHaveText('Classic'),
     )
   })
 

@@ -49,11 +49,8 @@ export type Flags = typeof Flags.Type
 export const flags: Effect.Effect<Flags> = Effect.gen(function* () {
   const maybeBest = yield* loadBestScore
   const maybeRecord = yield* loadDailyRecord
-  const now = yield* Clock.currentTimeMillis
-  const today = dayKey(new Date(now))
-  const maybeLockedDaily = Option.flatMap(maybeRecord, record =>
-    record.dayKey === today ? Option.some(record) : Option.none(),
-  )
+  const today = dayKey(new Date(yield* Clock.currentTimeMillis))
+  const maybeLockedDaily = Option.filter(maybeRecord, record => record.dayKey === today)
   return Flags.make({
     best: Option.getOrElse(maybeBest, () => 0),
     maybeLockedDaily,

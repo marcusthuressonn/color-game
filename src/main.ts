@@ -1,11 +1,12 @@
 import { BrowserKeyValueStore } from '@effect/platform-browser'
-import { Array, Effect, Match as M, Option, Random, Schema as S } from 'effect'
+import { Array, Clock, Effect, Match as M, Option, Random, Schema as S } from 'effect'
 import { Command, Runtime } from 'foldkit'
 import { Document, Html, html } from 'foldkit/html'
 import { m } from 'foldkit/message'
 
 import { Board, generateBoard } from './board'
 import { type OkLch, oklchToSrgb, srgbToCss } from './color'
+import { dailyNumber, dailySeed } from './daily'
 import { Mode } from './mode'
 import { loadBestScore, saveBestScore } from './persistence'
 
@@ -26,6 +27,7 @@ export const Model = S.Struct({
   best: S.Number,
   isNewBest: S.Boolean,
   mode: Mode,
+  dailyNumber: S.Number,
 })
 export type Model = typeof Model.Type
 
@@ -50,6 +52,10 @@ export const TappedTile = m('TappedTile', { index: S.Number })
 export const ClickedSelectMode = m('ClickedSelectMode', { mode: Mode })
 export const ClickedPlayAgain = m('ClickedPlayAgain')
 export const StartedNewRun = m('StartedNewRun', { seed: S.Number })
+export const StartedDailyRun = m('StartedDailyRun', {
+  seed: S.Number,
+  dailyNumber: S.Number,
+})
 export const CompletedSaveBestScore = m('CompletedSaveBestScore')
 
 export const Message = S.Union([
@@ -58,6 +64,7 @@ export const Message = S.Union([
   ClickedSelectMode,
   ClickedPlayAgain,
   StartedNewRun,
+  StartedDailyRun,
   CompletedSaveBestScore,
 ])
 export type Message = typeof Message.Type
@@ -68,6 +75,19 @@ export const GenerateRunSeed = Command.define(
   'GenerateRunSeed',
   StartedNewRun,
 )(Random.nextInt.pipe(Effect.map(seed => StartedNewRun({ seed }))))
+
+export const GenerateDailySeed = Command.define(
+  'GenerateDailySeed',
+  StartedDailyRun,
+)(
+  Effect.gen(function* () {
+    const today = new Date(yield* Clock.currentTimeMillis)
+    return StartedDailyRun({
+      seed: dailySeed(today),
+      dailyNumber: dailyNumber(today),
+    })
+  }),
+)
 
 export const SaveBestScore = Command.define(
   'SaveBestScore',
@@ -82,7 +102,12 @@ export const SaveBestScore = Command.define(
 
 // UPDATE
 
-const freshModel = (seed: number, best: number, mode: Mode): Model => ({
+const freshModel = (
+  seed: number,
+  best: number,
+  mode: Mode,
+  dailyNumber: number,
+): Model => ({
   seed,
   roundIndex: INITIAL_ROUND_INDEX,
   board: generateBoard(seed, INITIAL_ROUND_INDEX),
@@ -91,12 +116,16 @@ const freshModel = (seed: number, best: number, mode: Mode): Model => ({
   best,
   isNewBest: false,
   mode,
+  dailyNumber,
 })
 
 const titleModel = (best: number): Model => ({
-  ...freshModel(INITIAL_SEED, best, 'Classic'),
+  ...freshModel(INITIAL_SEED, best, 'Classic', 0),
   status: 'Title',
 })
+
+const seedRunForMode = (mode: Mode): Command.Command<Message> =>
+  mode === 'Daily' ? GenerateDailySeed() : GenerateRunSeed()
 
 export const update = (
   model: Model,
@@ -133,9 +162,16 @@ export const update = (
           [],
         ]
       },
-      ClickedSelectMode: ({ mode }) => [{ ...model, mode }, [GenerateRunSeed()]],
-      ClickedPlayAgain: () => [model, [GenerateRunSeed()]],
-      StartedNewRun: ({ seed }) => [freshModel(seed, model.best, model.mode), []],
+      ClickedSelectMode: ({ mode }) => [{ ...model, mode }, [seedRunForMode(mode)]],
+      ClickedPlayAgain: () => [model, [seedRunForMode(model.mode)]],
+      StartedNewRun: ({ seed }) => [
+        freshModel(seed, model.best, model.mode, 0),
+        [],
+      ],
+      StartedDailyRun: ({ seed, dailyNumber }) => [
+        freshModel(seed, model.best, 'Daily', dailyNumber),
+        [],
+      ],
       CompletedSaveBestScore: () => [model, []],
     }),
   )
@@ -222,6 +258,12 @@ const gameOverView = (score: number, best: number, isNewBest: boolean): Html =>
 const modeView = (mode: Mode): Html =>
   p([Class('mode'), AriaLabel('Mode')], [mode])
 
+const dailyNumberView = (dailyNumber: number): Html =>
+  p([Class('daily-number'), AriaLabel('Daily Number')], [`#${dailyNumber}`])
+
+const dailyBadges = (mode: Mode, dailyNumber: number): ReadonlyArray<Html> =>
+  mode === 'Daily' ? [dailyNumberView(dailyNumber)] : []
+
 const modeButton = (mode: Mode): Html =>
   button([Class('start-run'), OnClick(ClickedSelectMode({ mode }))], [mode])
 
@@ -243,11 +285,13 @@ const statusView = (model: Model): ReadonlyArray<Html> =>
     M.when('Title', () => [titleView(model.best)]),
     M.when('Playing', () => [
       modeView(model.mode),
+      ...dailyBadges(model.mode, model.dailyNumber),
       scoreView(model.score),
       boardView(model.board, false),
     ]),
     M.when('GameOver', () => [
       modeView(model.mode),
+      ...dailyBadges(model.mode, model.dailyNumber),
       scoreView(model.score),
       boardView(model.board, true),
       gameOverView(model.score, model.best, model.isNewBest),

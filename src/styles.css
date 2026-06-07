@@ -215,3 +215,16 @@ body {
 .mode::before {
   content: 'Mode ';
 }
+
+.daily-number {
+  margin: 0;
+  font-size: 0.875rem;
+  font-weight: 500;
+  letter-spacing: 0.04em;
+  color: #666;
+  font-variant-numeric: tabular-nums;
+}
+
+.daily-number::before {
+  content: 'Daily ';
+}

@@ -7,9 +7,11 @@ import {
   ClickedPlayAgain,
   ClickedSelectMode,
   CompletedSaveBestScore,
+  GenerateDailySeed,
   GenerateRunSeed,
   type Model,
   SaveBestScore,
+  StartedDailyRun,
   StartedNewRun,
   TappedTile,
   update,
@@ -26,6 +28,7 @@ const initialModel: Model = {
   best: 0,
   isNewBest: false,
   mode: 'Classic',
+  dailyNumber: 0,
 }
 
 describe('update', () => {
@@ -124,23 +127,28 @@ describe('update', () => {
     )
   })
 
-  test('ClickedSelectMode(Daily) sets the Mode to Daily, issues GenerateRunSeed, and routes to Playing', () => {
+  test('ClickedSelectMode(Daily) sets the Mode to Daily, issues GenerateDailySeed, and routes to Playing', () => {
     const titleModel: Model = { ...initialModel, status: 'Title' }
 
     Story.story(
       update,
       Story.with(titleModel),
       Story.message(ClickedSelectMode({ mode: 'Daily' })),
-      Story.Command.expectExact(GenerateRunSeed),
+      Story.Command.expectExact(GenerateDailySeed),
       Story.model(model => {
         expect(model.mode).toBe('Daily')
         expect(model.status).toBe('Title')
       }),
-      Story.Command.resolve(GenerateRunSeed, StartedNewRun({ seed: 456 })),
+      Story.Command.resolve(
+        GenerateDailySeed,
+        StartedDailyRun({ seed: 456, dailyNumber: 158 }),
+      ),
       Story.model(model => {
         expect(model.mode).toBe('Daily')
         expect(model.seed).toBe(456)
         expect(model.status).toBe('Playing')
+        expect(model.dailyNumber).toBe(158)
+        expect(model.board).toEqual(generateBoard(456, 0))
       }),
     )
   })
@@ -159,24 +167,45 @@ describe('update', () => {
     )
   })
 
-  test('ClickedPlayAgain after a Daily Run preserves the Daily Mode through the reset', () => {
+  test('ClickedPlayAgain after a Daily Run issues GenerateDailySeed and preserves Daily Mode', () => {
     const dailyGameOver: Model = {
       ...initialModel,
       mode: 'Daily',
       status: 'GameOver',
       score: 4,
+      dailyNumber: 158,
     }
 
     Story.story(
       update,
       Story.with(dailyGameOver),
       Story.message(ClickedPlayAgain()),
-      Story.Command.expectExact(GenerateRunSeed),
-      Story.Command.resolve(GenerateRunSeed, StartedNewRun({ seed: 21 })),
+      Story.Command.expectExact(GenerateDailySeed),
+      Story.Command.resolve(
+        GenerateDailySeed,
+        StartedDailyRun({ seed: 21, dailyNumber: 158 }),
+      ),
       Story.model(model => {
         expect(model.mode).toBe('Daily')
         expect(model.status).toBe('Playing')
         expect(model.score).toBe(0)
+        expect(model.dailyNumber).toBe(158)
+      }),
+    )
+  })
+
+  test('StartedDailyRun records the dailyNumber on the Model', () => {
+    const dailyTitle: Model = { ...initialModel, status: 'Title', mode: 'Daily' }
+
+    Story.story(
+      update,
+      Story.with(dailyTitle),
+      Story.message(StartedDailyRun({ seed: 777, dailyNumber: 159 })),
+      Story.model(model => {
+        expect(model.mode).toBe('Daily')
+        expect(model.status).toBe('Playing')
+        expect(model.dailyNumber).toBe(159)
+        expect(model.seed).toBe(777)
       }),
     )
   })

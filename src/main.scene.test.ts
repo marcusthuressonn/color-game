@@ -3,8 +3,10 @@ import { describe, test } from 'vitest'
 
 import { generateBoard } from './board'
 import {
+  GenerateDailySeed,
   GenerateRunSeed,
   type Model,
+  StartedDailyRun,
   StartedNewRun,
   update,
   view,
@@ -21,6 +23,7 @@ const initialModel: Model = {
   best: 0,
   isNewBest: false,
   mode: 'Classic',
+  dailyNumber: 0,
 }
 
 const titleModel: Model = { ...initialModel, status: 'Title' }
@@ -51,17 +54,29 @@ describe('scene', () => {
     )
   })
 
-  test('clicking Daily issues GenerateRunSeed and enters a Daily Playing Run', () => {
+  test('clicking Daily issues GenerateDailySeed and enters a Daily Playing Run with Daily #N visible', () => {
     Scene.scene(
       { update, view },
       Scene.with(titleModel),
       Scene.click(Scene.role('button', { name: 'Daily' })),
-      Scene.Command.expectExact(GenerateRunSeed),
-      Scene.Command.resolve(GenerateRunSeed, StartedNewRun({ seed: 7 })),
+      Scene.Command.expectExact(GenerateDailySeed),
+      Scene.Command.resolve(
+        GenerateDailySeed,
+        StartedDailyRun({ seed: 7, dailyNumber: 158 }),
+      ),
       Scene.expect(Scene.role('button', { name: 'Daily' })).not.toExist(),
       Scene.expect(Scene.role('grid', { name: 'Board' })).toExist(),
       Scene.expect(Scene.label('Score')).toHaveText('0'),
       Scene.expect(Scene.label('Mode')).toHaveText('Daily'),
+      Scene.expect(Scene.label('Daily Number')).toHaveText('#158'),
+    )
+  })
+
+  test('Classic Playing does not surface a Daily Number', () => {
+    Scene.scene(
+      { update, view },
+      Scene.with(initialModel),
+      Scene.expect(Scene.label('Daily Number')).not.toExist(),
     )
   })
 

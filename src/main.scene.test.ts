@@ -10,15 +10,23 @@ describe('scene', () => {
     Scene.scene(
       { update, view },
       Scene.with(initialModel),
-      Scene.expect(Scene.text('Color Game')).toExist(),
+      Scene.expect(Scene.role('heading', { name: 'Color Game' })).toExist(),
     )
   })
 
-  test('renders the tagline', () => {
+  test('renders the Board as a grid', () => {
     Scene.scene(
       { update, view },
       Scene.with(initialModel),
-      Scene.expect(Scene.text('Find the odd shade.')).toExist(),
+      Scene.expect(Scene.role('grid', { name: 'Board' })).toExist(),
+    )
+  })
+
+  test('renders exactly 25 Tiles', () => {
+    Scene.scene(
+      { update, view },
+      Scene.with(initialModel),
+      Scene.expectAll(Scene.all.role('gridcell')).toHaveCount(25),
     )
   })
 })

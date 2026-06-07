@@ -1,9 +1,12 @@
 import { Scene } from 'foldkit'
 import { describe, test } from 'vitest'
 
+import { generateBoard } from './board'
 import { type Model, update, view } from './main'
 
-const initialModel: Model = {}
+const initialModel: Model = {
+  board: generateBoard(0xc010_4eed, 0),
+}
 
 describe('scene', () => {
   test('renders the game title', () => {

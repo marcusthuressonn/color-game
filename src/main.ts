@@ -3,11 +3,17 @@ import { Command, Runtime } from 'foldkit'
 import { Document, Html, html } from 'foldkit/html'
 import { m } from 'foldkit/message'
 
-import { BOARD_SIZE, PLACEHOLDER_TILE_COLOR } from './board'
+import { Board, generateBoard } from './board'
+import { type OkLch, oklchToSrgb, srgbToCss } from './color'
+
+const INITIAL_SEED = 0xc010_4eed
+const INITIAL_ROUND_INDEX = 0
 
 // MODEL
 
-export const Model = S.Struct({})
+export const Model = S.Struct({
+  board: Board,
+})
 export type Model = typeof Model.Type
 
 // MESSAGE
@@ -34,7 +40,10 @@ export const update = (
 
 // INIT
 
-export const init: Runtime.ProgramInit<Model, Message> = () => [{}, []]
+export const init: Runtime.ProgramInit<Model, Message> = () => [
+  { board: generateBoard(INITIAL_SEED, INITIAL_ROUND_INDEX) },
+  [],
+]
 
 // VIEW
 
@@ -49,38 +58,43 @@ const {
   AriaColcount,
 } = html<Message>()
 
-const tileView = (): Html =>
+const tileColorAt = (board: Board, index: number): OkLch =>
+  index === board.targetIndex ? board.targetColor : board.baseColor
+
+const tileView = (board: Board, index: number): Html =>
   div(
     [
       Role('gridcell'),
       Class('tile'),
-      Style({ 'background-color': PLACEHOLDER_TILE_COLOR }),
+      Style({ 'background-color': srgbToCss(oklchToSrgb(tileColorAt(board, index))) }),
     ],
     [],
   )
 
-const rowView = (): Html =>
+const rowView = (board: Board, rowIndex: number): Html =>
   div(
     [Role('row'), Class('board-row')],
-    Array.makeBy(BOARD_SIZE, () => tileView()),
+    Array.makeBy(board.size, columnIndex =>
+      tileView(board, rowIndex * board.size + columnIndex),
+    ),
   )
 
-const boardView = (): Html =>
+const boardView = (board: Board): Html =>
   div(
     [
       Role('grid'),
       AriaLabel('Board'),
-      AriaRowcount(BOARD_SIZE),
-      AriaColcount(BOARD_SIZE),
+      AriaRowcount(board.size),
+      AriaColcount(board.size),
       Class('board'),
     ],
-    Array.makeBy(BOARD_SIZE, () => rowView()),
+    Array.makeBy(board.size, rowIndex => rowView(board, rowIndex)),
   )
 
-export const view = (_model: Model): Document => ({
+export const view = (model: Model): Document => ({
   title: 'Color Game',
   body: div(
     [Class('app')],
-    [h1([Class('title')], ['Color Game']), boardView()],
+    [h1([Class('title')], ['Color Game']), boardView(model.board)],
   ),
 })

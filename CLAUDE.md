@@ -6,17 +6,15 @@ This is a **Foldkit** web app: TypeScript, built on **Effect**, architected like
 `update`/`view`, unidirectional data flow, side effects only at runtime seams). A future Effect
 backend is planned but out of scope for v1 — the v1 game is fully client-side.
 
-**Before writing or modifying any app code you MUST read and follow the bundled skills:**
+**Before writing or modifying any app code you MUST use the bundled skills (they live in
+`.claude/skills/`, so they are auto-discovered — invoke them):**
 
-- **Foldkit** (frontend + app architecture) — read `.agents/skills/foldkit/SKILL.md`. Foldkit is
-  non-incremental: no React, no escape hatches, one idiomatic shape. Model behavior, don't pick
-  libraries. The canonical reference is the vendored subtree at `repos/foldkit/` (if present) —
-  pattern-match against its `examples/` and the typing-game rather than guessing APIs.
-- **Effect-TS** (Effect patterns, services, layers, error handling) — read
-  `.agents/skills/effect-ts/SKILL.md` for any Effect code.
-
-These skills are NOT auto-discovered (they live in `.agents/skills/`, not `.claude/skills/`), so read
-the `SKILL.md` files explicitly.
+- **Foldkit** (frontend + app architecture) — use the `foldkit` skill. Foldkit is non-incremental:
+  no React, no escape hatches, one idiomatic shape. Model behavior, don't pick libraries. The
+  canonical reference is the vendored subtree at `repos/foldkit/` (if present) — pattern-match against
+  its `examples/` and the typing-game rather than guessing APIs.
+- **Effect-TS** (Effect patterns, services, layers, error handling) — use the `effect-ts` skill for
+  any Effect code.
 
 ### Testing
 

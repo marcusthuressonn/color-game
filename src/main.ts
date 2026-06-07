@@ -222,6 +222,9 @@ const gameOverView = (score: number, best: number, isNewBest: boolean): Html =>
 const modeView = (mode: Mode): Html =>
   p([Class('mode'), AriaLabel('Mode')], [mode])
 
+const modeButton = (mode: Mode): Html =>
+  button([Class('start-run'), OnClick(ClickedSelectMode({ mode }))], [mode])
+
 const titleView = (best: number): Html =>
   div(
     [Class('title-screen')],
@@ -230,16 +233,7 @@ const titleView = (best: number): Html =>
       bestScoreView(best),
       div(
         [Class('mode-select'), Role('group'), AriaLabel('Choose a Mode')],
-        [
-          button(
-            [Class('start-run'), OnClick(ClickedSelectMode({ mode: 'Classic' }))],
-            ['Classic'],
-          ),
-          button(
-            [Class('start-run'), OnClick(ClickedSelectMode({ mode: 'Daily' }))],
-            ['Daily'],
-          ),
-        ],
+        [modeButton('Classic'), modeButton('Daily')],
       ),
     ],
   )

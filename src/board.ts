@@ -1,6 +1,7 @@
 import { Schema as S } from 'effect'
 
 import { OkLch, isInGamut, offsetLightness } from './color'
+import { delta as difficultyDelta } from './difficulty'
 import { type Prng, makePrng, nextFloat, nextInt } from './prng'
 
 export const BOARD_SIZE = 5
@@ -14,12 +15,6 @@ const BASE_LIGHTNESS_MAX = 0.7
 const BASE_CHROMA_MIN = 0.04
 const BASE_CHROMA_MAX = 0.08
 const HUE_MAX = 360
-
-/**
- * Fixed perceptual lightness delta between the Target and the rest of the Board
- * for this slice. The shrinking difficulty curve is deferred to #4.
- */
-export const ROUND_DELTA = 0.1
 
 /**
  * A generated Board: the grid size, the base color shared by all non-Target Tiles,
@@ -56,9 +51,13 @@ const drawBaseColor = (prng: Prng): readonly [OkLch, Prng] => {
   return [{ L: lightness, C: chroma, h: hue }, afterLightness]
 }
 
-const drawTargetColor = (base: OkLch, prng: Prng): readonly [OkLch, Prng] => {
+const drawTargetColor = (
+  base: OkLch,
+  prng: Prng,
+  roundDelta: number,
+): readonly [OkLch, Prng] => {
   const [coin, next] = nextFloat(prng)
-  const signedDelta = coin < 0.5 ? -ROUND_DELTA : ROUND_DELTA
+  const signedDelta = coin < 0.5 ? -roundDelta : roundDelta
   const candidate = offsetLightness(base, signedDelta)
   const target = isInGamut(candidate) ? candidate : offsetLightness(base, -signedDelta)
   return [target, next]
@@ -66,12 +65,13 @@ const drawTargetColor = (base: OkLch, prng: Prng): readonly [OkLch, Prng] => {
 
 /**
  * Generate a Board from a Seed and a Round index. Pure: the same `(seed, roundIndex)`
- * always returns the same Board.
+ * always returns the same Board. The per-Round perceptual delta comes from the
+ * Difficulty curve module.
  */
 export const generateBoard = (seed: number, roundIndex: number): Board => {
   const prng = makePrng(seedForRound(seed, roundIndex))
   const [baseColor, afterBase] = drawBaseColor(prng)
   const [targetIndex, afterIndex] = nextInt(afterBase, 0, TILE_COUNT)
-  const [targetColor] = drawTargetColor(baseColor, afterIndex)
+  const [targetColor] = drawTargetColor(baseColor, afterIndex, difficultyDelta(roundIndex))
   return { size: BOARD_SIZE, baseColor, targetIndex, targetColor }
 }

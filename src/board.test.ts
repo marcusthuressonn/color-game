@@ -1,8 +1,9 @@
 import { Array } from 'effect'
 import { describe, expect, test } from 'vitest'
 
-import { BOARD_SIZE, ROUND_DELTA, generateBoard } from './board'
+import { BOARD_SIZE, generateBoard } from './board'
 import { deltaEok, isInGamut } from './color'
+import { delta as difficultyDelta } from './difficulty'
 
 const TILE_COUNT = BOARD_SIZE * BOARD_SIZE
 
@@ -31,11 +32,21 @@ describe('Board generator', () => {
     expect(first.baseColor).not.toEqual(second.baseColor)
   })
 
-  test('Target color differs from base by exactly the round delta', () => {
-    const board = generateBoard(123, 0)
-    expect(deltaEok(board.baseColor, board.targetColor)).toBeCloseTo(
-      ROUND_DELTA,
-      6,
+  test('Target color differs from base by the difficulty curve delta for that round', () => {
+    Array.makeBy(8, roundIndex => roundIndex).forEach(roundIndex => {
+      const board = generateBoard(123, roundIndex)
+      expect(deltaEok(board.baseColor, board.targetColor)).toBeCloseTo(
+        difficultyDelta(roundIndex),
+        6,
+      )
+    })
+  })
+
+  test('later rounds present a subtler Target than earlier rounds', () => {
+    const early = generateBoard(123, 0)
+    const late = generateBoard(123, 10)
+    expect(deltaEok(late.baseColor, late.targetColor)).toBeLessThan(
+      deltaEok(early.baseColor, early.targetColor),
     )
   })
 

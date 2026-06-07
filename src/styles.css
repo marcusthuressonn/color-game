@@ -228,3 +228,17 @@ body {
 .daily-number::before {
   content: 'Daily ';
 }
+
+.streak {
+  margin: 0;
+  font-size: 1rem;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  color: #111;
+}
+
+.streak::before {
+  content: 'Streak ';
+  font-weight: 500;
+  color: #666;
+}

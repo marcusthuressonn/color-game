@@ -1,7 +1,13 @@
-import { Array } from 'effect'
+import { Array, Option } from 'effect'
 import { describe, expect, test } from 'vitest'
 
-import { DAILY_EPOCH_DAY_KEY, dailyNumber, dailySeed, dayKey } from './daily'
+import {
+  DAILY_EPOCH_DAY_KEY,
+  dailyNumber,
+  dailySeed,
+  dayKey,
+  streakTransition,
+} from './daily'
 
 const localDate = (year: number, month: number, day: number): Date =>
   new Date(year, month - 1, day, 12, 0, 0, 0)
@@ -88,5 +94,41 @@ describe('dailyNumber', () => {
       const tomorrow = localDate(2026, 1, 2 + dayOffset)
       expect(dailyNumber(tomorrow)).toBe(dailyNumber(today) + 1)
     })
+  })
+})
+
+describe('streakTransition', () => {
+  test('reopening on the same day leaves the streak unchanged', () => {
+    expect(streakTransition(5, Option.some('2026-06-07'), '2026-06-07')).toBe(5)
+  })
+
+  test('playing on the next consecutive day increments the streak by one', () => {
+    expect(streakTransition(5, Option.some('2026-06-06'), '2026-06-07')).toBe(6)
+  })
+
+  test('a one-day gap resets the streak to 1', () => {
+    expect(streakTransition(5, Option.some('2026-06-05'), '2026-06-07')).toBe(1)
+  })
+
+  test('a large gap resets the streak to 1', () => {
+    expect(streakTransition(12, Option.some('2026-01-01'), '2026-06-07')).toBe(1)
+  })
+
+  test('no prior play history sets the streak to 1', () => {
+    expect(streakTransition(0, Option.none(), '2026-06-07')).toBe(1)
+  })
+
+  test('consecutive across a month boundary increments', () => {
+    expect(streakTransition(3, Option.some('2026-01-31'), '2026-02-01')).toBe(4)
+  })
+
+  test('consecutive across a year boundary increments', () => {
+    expect(streakTransition(9, Option.some('2026-12-31'), '2027-01-01')).toBe(10)
+  })
+
+  test('does not take Score as input — a low Score cannot break the streak', () => {
+    // The signature is (prevStreak, lastPlayedDayKey, todayDayKey) with no
+    // Score parameter, so a poor result simply cannot affect the streak.
+    expect(streakTransition.length).toBe(3)
   })
 })

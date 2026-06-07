@@ -5,6 +5,8 @@
  * ambient wall-clock reads here (see ADR-0003).
  */
 
+import { Option } from 'effect'
+
 const MS_PER_DAY = 24 * 60 * 60 * 1000
 
 const SEED_MIX_MULTIPLIER_FIRST = 0x85ebca6b
@@ -59,3 +61,30 @@ export const dailySeed = (date: Date): number => {
   mixed = Math.imul(mixed ^ (mixed >>> SEED_MIX_SHIFT), SEED_MIX_MULTIPLIER_SECOND)
   return toUint32(mixed ^ (mixed >>> SEED_MIX_SHIFT))
 }
+
+/**
+ * Pure transition from a previous Streak + last-played day to the Streak that
+ * applies on `todayDayKey`. Three cases:
+ *
+ *   - same day reopened (last === today) → unchanged
+ *   - exactly the next consecutive day (today − last = 1 day) → prev + 1
+ *   - no prior play, or a gap of one or more missed days → reset to 1
+ *
+ * The function never takes a Score: a low Score never breaks the Streak — only
+ * a missed day does.
+ */
+export const streakTransition = (
+  prevStreak: number,
+  lastPlayedDayKey: Option.Option<string>,
+  todayDayKey: string,
+): number =>
+  Option.match(lastPlayedDayKey, {
+    onNone: () => 1,
+    onSome: lastKey => {
+      if (lastKey === todayDayKey) return prevStreak
+      const gapDays =
+        (dayKeyToMidnightUtcMs(todayDayKey) - dayKeyToMidnightUtcMs(lastKey)) /
+        MS_PER_DAY
+      return gapDays === 1 ? prevStreak + 1 : 1
+    },
+  })

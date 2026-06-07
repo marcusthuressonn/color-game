@@ -58,6 +58,7 @@ describe('Persistence', () => {
       dailyNumber: 158,
       seed: 12345,
       score: 4,
+      streak: 1,
     }
     await provide(saveDailyRecord(record))
     const result = await provide(loadDailyRecord)
@@ -71,6 +72,7 @@ describe('Persistence', () => {
         dailyNumber: 157,
         seed: 1,
         score: 0,
+        streak: 4,
       }),
     )
     const replacement: DailyRecord = {
@@ -78,10 +80,24 @@ describe('Persistence', () => {
       dailyNumber: 158,
       seed: 9,
       score: 6,
+      streak: 5,
     }
     await provide(saveDailyRecord(replacement))
     const result = await provide(loadDailyRecord)
     expect(result).toStrictEqual(Option.some(replacement))
+  })
+
+  test('saveDailyRecord persists the streak across reloads', async () => {
+    const record: DailyRecord = {
+      dayKey: '2026-06-07',
+      dailyNumber: 158,
+      seed: 1,
+      score: 3,
+      streak: 12,
+    }
+    await provide(saveDailyRecord(record))
+    const result = await provide(loadDailyRecord)
+    expect(result).toStrictEqual(Option.some(record))
   })
 
   test('loadDailyRecord returns None when stored value is not valid JSON', async () => {

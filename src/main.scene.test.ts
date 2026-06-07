@@ -27,6 +27,8 @@ const initialModel: Model = {
   mode: 'Classic',
   dailyNumber: 0,
   dailyDayKey: '',
+  streak: 0,
+  lastPlayedDayKey: '',
 }
 
 const titleModel: Model = { ...initialModel, status: 'Title' }
@@ -93,6 +95,42 @@ describe('scene', () => {
     )
   })
 
+  test('Daily Game Over surfaces the current Streak', () => {
+    const dailyGameOverModel: Model = {
+      ...initialModel,
+      status: 'GameOver',
+      mode: 'Daily',
+      score: 4,
+      dailyNumber: 158,
+      dailyDayKey: '2026-06-07',
+      streak: 5,
+      lastPlayedDayKey: '2026-06-07',
+    }
+
+    Scene.scene(
+      { update, view },
+      Scene.with(dailyGameOverModel),
+      Scene.expect(Scene.label('Streak')).toHaveText('5'),
+    )
+  })
+
+  test('Classic Game Over does not surface a Streak', () => {
+    const classicGameOverModel: Model = {
+      ...initialModel,
+      status: 'GameOver',
+      mode: 'Classic',
+      score: 4,
+      streak: 5,
+      lastPlayedDayKey: '2026-06-07',
+    }
+
+    Scene.scene(
+      { update, view },
+      Scene.with(classicGameOverModel),
+      Scene.expect(Scene.label('Streak')).not.toExist(),
+    )
+  })
+
   test('init with a locked Daily for today shows the locked result and not a fresh Board', () => {
     const [lockedModel] = init({
       best: 3,
@@ -101,7 +139,10 @@ describe('scene', () => {
         dailyNumber: 158,
         seed: 99,
         score: 5,
+        streak: 4,
       }),
+      prevStreak: 4,
+      prevLastPlayedDayKey: Option.some('2026-06-07'),
     })
 
     Scene.scene(
@@ -111,6 +152,7 @@ describe('scene', () => {
       Scene.expect(Scene.label('Final Score')).toHaveText('5'),
       Scene.expect(Scene.label('Mode')).toHaveText('Daily'),
       Scene.expect(Scene.label('Daily Number')).toHaveText('#158'),
+      Scene.expect(Scene.label('Streak')).toHaveText('4'),
       Scene.expect(Scene.role('button', { name: 'Play again' })).not.toExist(),
       Scene.expect(Scene.role('button', { name: 'Classic' })).not.toExist(),
       Scene.expect(Scene.role('button', { name: 'Daily' })).not.toExist(),
@@ -118,7 +160,12 @@ describe('scene', () => {
   })
 
   test('init with no locked Daily shows the Title screen', () => {
-    const [freshModel] = init({ best: 7, maybeLockedDaily: Option.none() })
+    const [freshModel] = init({
+      best: 7,
+      maybeLockedDaily: Option.none(),
+      prevStreak: 0,
+      prevLastPlayedDayKey: Option.none(),
+    })
 
     Scene.scene(
       { update, view },

@@ -14,6 +14,7 @@ export const DailyRecord = S.Struct({
   dailyNumber: S.Number,
   seed: S.Number,
   score: S.Number,
+  streak: S.Number,
 })
 export type DailyRecord = typeof DailyRecord.Type
 

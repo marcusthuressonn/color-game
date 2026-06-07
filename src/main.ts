@@ -6,7 +6,7 @@ import { m } from 'foldkit/message'
 
 import { Board, generateBoard } from './board'
 import { type OkLch, oklchToSrgb, srgbToCss } from './color'
-import { dailyNumber, dailySeed, dayKey } from './daily'
+import { dailyNumber, dailySeed, dayKey, streakTransition } from './daily'
 import { Mode } from './mode'
 import {
   DailyRecord,
@@ -35,6 +35,8 @@ export const Model = S.Struct({
   mode: Mode,
   dailyNumber: S.Number,
   dailyDayKey: S.String,
+  streak: S.Number,
+  lastPlayedDayKey: S.String,
 })
 export type Model = typeof Model.Type
 
@@ -43,6 +45,8 @@ export type Model = typeof Model.Type
 export const Flags = S.Struct({
   best: S.Number,
   maybeLockedDaily: S.Option(DailyRecord),
+  prevStreak: S.Number,
+  prevLastPlayedDayKey: S.Option(S.String),
 })
 export type Flags = typeof Flags.Type
 
@@ -54,6 +58,8 @@ export const flags: Effect.Effect<Flags> = Effect.gen(function* () {
   return Flags.make({
     best: Option.getOrElse(maybeBest, () => 0),
     maybeLockedDaily,
+    prevStreak: Option.match(maybeRecord, { onNone: () => 0, onSome: record => record.streak }),
+    prevLastPlayedDayKey: Option.map(maybeRecord, record => record.dayKey),
   })
 }).pipe(Effect.provide(BrowserKeyValueStore.layerLocalStorage))
 
@@ -135,6 +141,8 @@ const freshModel = (
   mode: Mode,
   dailyNumber: number,
   dailyDayKey: string,
+  streak: number,
+  lastPlayedDayKey: string,
 ): Model => ({
   seed,
   roundIndex: INITIAL_ROUND_INDEX,
@@ -146,10 +154,16 @@ const freshModel = (
   mode,
   dailyNumber,
   dailyDayKey,
+  streak,
+  lastPlayedDayKey,
 })
 
-const titleModel = (best: number): Model => ({
-  ...freshModel(INITIAL_SEED, best, 'Classic', 0, ''),
+const titleModel = (
+  best: number,
+  streak: number,
+  lastPlayedDayKey: string,
+): Model => ({
+  ...freshModel(INITIAL_SEED, best, 'Classic', 0, '', streak, lastPlayedDayKey),
   status: 'Title',
 })
 
@@ -164,6 +178,8 @@ const lockedDailyModel = (record: DailyRecord, best: number): Model => ({
   mode: 'Daily',
   dailyNumber: record.dailyNumber,
   dailyDayKey: record.dayKey,
+  streak: record.streak,
+  lastPlayedDayKey: record.dayKey,
 })
 
 const seedRunForMode = (mode: Mode): Command.Command<Message> =>
@@ -185,11 +201,24 @@ export const update = (
         }
         if (index !== model.board.targetIndex) {
           const isNewBest = model.score > model.best
+          const nextStreak =
+            model.mode === 'Daily'
+              ? streakTransition(
+                  model.streak,
+                  model.lastPlayedDayKey === ''
+                    ? Option.none()
+                    : Option.some(model.lastPlayedDayKey),
+                  model.dailyDayKey,
+                )
+              : model.streak
           const nextModel: Model = {
             ...model,
             status: 'GameOver',
             best: isNewBest ? model.score : model.best,
             isNewBest,
+            streak: nextStreak,
+            lastPlayedDayKey:
+              model.mode === 'Daily' ? model.dailyDayKey : model.lastPlayedDayKey,
           }
           const bestCommands = isNewBest
             ? [SaveBestScore({ score: model.score })]
@@ -203,6 +232,7 @@ export const update = (
                       dailyNumber: model.dailyNumber,
                       seed: model.seed,
                       score: model.score,
+                      streak: nextStreak,
                     },
                   }),
                 ]
@@ -223,11 +253,19 @@ export const update = (
       ClickedSelectMode: ({ mode }) => [{ ...model, mode }, [seedRunForMode(mode)]],
       ClickedPlayAgain: () => [model, [seedRunForMode(model.mode)]],
       StartedNewRun: ({ seed }) => [
-        freshModel(seed, model.best, model.mode, 0, ''),
+        freshModel(seed, model.best, model.mode, 0, '', model.streak, model.lastPlayedDayKey),
         [],
       ],
       StartedDailyRun: ({ seed, dailyNumber, dayKey }) => [
-        freshModel(seed, model.best, 'Daily', dailyNumber, dayKey),
+        freshModel(
+          seed,
+          model.best,
+          'Daily',
+          dailyNumber,
+          dayKey,
+          model.streak,
+          model.lastPlayedDayKey,
+        ),
         [],
       ],
       CompletedSaveBestScore: () => [model, []],
@@ -240,9 +278,14 @@ export const update = (
 export const init: Runtime.ProgramInit<Model, Message, Flags> = ({
   best,
   maybeLockedDaily,
+  prevStreak,
+  prevLastPlayedDayKey,
 }) =>
   Option.match(maybeLockedDaily, {
-    onNone: () => [titleModel(best), []],
+    onNone: () => [
+      titleModel(best, prevStreak, Option.getOrElse(prevLastPlayedDayKey, () => '')),
+      [],
+    ],
     onSome: record => [lockedDailyModel(record, best), []],
   })
 
@@ -309,11 +352,15 @@ const newBestFlourish = (): Html =>
 const playAgainButton = (): Html =>
   button([Class('play-again'), OnClick(ClickedPlayAgain())], ['Play again'])
 
+const streakView = (streak: number): Html =>
+  p([Class('streak'), AriaLabel('Streak')], [streak.toString()])
+
 const gameOverView = (
   score: number,
   best: number,
   isNewBest: boolean,
   mode: Mode,
+  streak: number,
 ): Html =>
   div(
     [Role('dialog'), AriaLabel('Game Over'), Class('game-over')],
@@ -322,7 +369,7 @@ const gameOverView = (
       p([Class('game-over-score'), AriaLabel('Final Score')], [score.toString()]),
       bestScoreView(best),
       ...(isNewBest ? [newBestFlourish()] : []),
-      ...(mode === 'Daily' ? [] : [playAgainButton()]),
+      ...(mode === 'Daily' ? [streakView(streak)] : [playAgainButton()]),
     ],
   )
 
@@ -365,7 +412,7 @@ const statusView = (model: Model): ReadonlyArray<Html> =>
       ...dailyBadges(model.mode, model.dailyNumber),
       scoreView(model.score),
       boardView(model.board, true),
-      gameOverView(model.score, model.best, model.isNewBest, model.mode),
+      gameOverView(model.score, model.best, model.isNewBest, model.mode, model.streak),
     ]),
     M.exhaustive,
   )

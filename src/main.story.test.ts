@@ -39,6 +39,8 @@ const initialModel: Model = {
   mode: 'Classic',
   dailyNumber: 0,
   dailyDayKey: '',
+  streak: 0,
+  lastPlayedDayKey: '',
 }
 
 describe('update', () => {
@@ -254,6 +256,145 @@ describe('update', () => {
     )
   })
 
+  test('losing the Daily Run on a consecutive day increments the Streak and saves it on the record', () => {
+    const dailyRunning: Model = {
+      ...initialModel,
+      mode: 'Daily',
+      best: 9,
+      seed: 456,
+      dailyNumber: 159,
+      dailyDayKey: '2026-06-08',
+      streak: 3,
+      lastPlayedDayKey: '2026-06-07',
+      score: 2,
+      roundIndex: 2,
+      board: generateBoard(456, 2),
+    }
+    const nonTargetIndex =
+      dailyRunning.board.targetIndex === 0 ? 1 : dailyRunning.board.targetIndex - 1
+
+    Story.story(
+      update,
+      Story.with(dailyRunning),
+      Story.message(TappedTile({ index: nonTargetIndex })),
+      Story.Command.expectExact(SaveDailyRecord),
+      Story.Command.resolve(SaveDailyRecord, CompletedSaveDailyRecord()),
+      Story.model(model => {
+        expect(model.streak).toBe(4)
+        expect(model.lastPlayedDayKey).toBe('2026-06-08')
+      }),
+    )
+  })
+
+  test('losing the Daily Run after a gap resets the Streak to 1 and saves it on the record', () => {
+    const dailyRunning: Model = {
+      ...initialModel,
+      mode: 'Daily',
+      best: 9,
+      seed: 456,
+      dailyNumber: 161,
+      dailyDayKey: '2026-06-10',
+      streak: 12,
+      lastPlayedDayKey: '2026-06-07',
+      score: 2,
+      roundIndex: 2,
+      board: generateBoard(456, 2),
+    }
+    const nonTargetIndex =
+      dailyRunning.board.targetIndex === 0 ? 1 : dailyRunning.board.targetIndex - 1
+
+    Story.story(
+      update,
+      Story.with(dailyRunning),
+      Story.message(TappedTile({ index: nonTargetIndex })),
+      Story.Command.expectExact(SaveDailyRecord),
+      Story.Command.resolve(SaveDailyRecord, CompletedSaveDailyRecord()),
+      Story.model(model => {
+        expect(model.streak).toBe(1)
+        expect(model.lastPlayedDayKey).toBe('2026-06-10')
+      }),
+    )
+  })
+
+  test('losing the first Daily Run ever sets the Streak to 1', () => {
+    const dailyRunning: Model = {
+      ...initialModel,
+      mode: 'Daily',
+      seed: 456,
+      dailyNumber: 158,
+      dailyDayKey: '2026-06-07',
+      streak: 0,
+      lastPlayedDayKey: '',
+      score: 5,
+      roundIndex: 5,
+      board: generateBoard(456, 5),
+    }
+    const nonTargetIndex =
+      dailyRunning.board.targetIndex === 0 ? 1 : dailyRunning.board.targetIndex - 1
+
+    Story.story(
+      update,
+      Story.with(dailyRunning),
+      Story.message(TappedTile({ index: nonTargetIndex })),
+      Story.Command.resolve(SaveBestScore, CompletedSaveBestScore()),
+      Story.Command.resolve(SaveDailyRecord, CompletedSaveDailyRecord()),
+      Story.model(model => {
+        expect(model.streak).toBe(1)
+        expect(model.lastPlayedDayKey).toBe('2026-06-07')
+      }),
+    )
+  })
+
+  test('a low Daily Score does not break the Streak — only the day transition matters', () => {
+    const dailyRunning: Model = {
+      ...initialModel,
+      mode: 'Daily',
+      seed: 456,
+      dailyNumber: 159,
+      dailyDayKey: '2026-06-08',
+      streak: 7,
+      lastPlayedDayKey: '2026-06-07',
+      score: 0,
+      roundIndex: 0,
+      board: generateBoard(456, 0),
+    }
+    const nonTargetIndex =
+      dailyRunning.board.targetIndex === 0 ? 1 : dailyRunning.board.targetIndex - 1
+
+    Story.story(
+      update,
+      Story.with(dailyRunning),
+      Story.message(TappedTile({ index: nonTargetIndex })),
+      Story.Command.resolve(SaveDailyRecord, CompletedSaveDailyRecord()),
+      Story.model(model => {
+        expect(model.streak).toBe(8)
+      }),
+    )
+  })
+
+  test('losing a Classic Run leaves the streak fields untouched', () => {
+    const classicRunning: Model = {
+      ...initialModel,
+      mode: 'Classic',
+      streak: 4,
+      lastPlayedDayKey: '2026-06-06',
+      score: 2,
+      best: 9,
+    }
+    const nonTargetIndex =
+      classicRunning.board.targetIndex === 0 ? 1 : classicRunning.board.targetIndex - 1
+
+    Story.story(
+      update,
+      Story.with(classicRunning),
+      Story.message(TappedTile({ index: nonTargetIndex })),
+      Story.model(model => {
+        expect(model.streak).toBe(4)
+        expect(model.lastPlayedDayKey).toBe('2026-06-06')
+      }),
+    )
+  })
+
   test('losing the Classic Run does not emit SaveDailyRecord', () => {
     const classicRunning: Model = { ...initialModel, score: 2, best: 9 }
     const nonTargetIndex =
@@ -271,11 +412,27 @@ describe('update', () => {
     const [model, commands] = init({
       best: 5,
       maybeLockedDaily: Option.none(),
+      prevStreak: 0,
+      prevLastPlayedDayKey: Option.none(),
     })
     expect(model.status).toBe('Title')
     expect(model.best).toBe(5)
     expect(model.mode).toBe('Classic')
+    expect(model.streak).toBe(0)
+    expect(model.lastPlayedDayKey).toBe('')
     expect(commands).toEqual([])
+  })
+
+  test('init carries the prior Daily streak and last-played day onto the Title model', () => {
+    const [model] = init({
+      best: 5,
+      maybeLockedDaily: Option.none(),
+      prevStreak: 4,
+      prevLastPlayedDayKey: Option.some('2026-06-05'),
+    })
+    expect(model.status).toBe('Title')
+    expect(model.streak).toBe(4)
+    expect(model.lastPlayedDayKey).toBe('2026-06-05')
   })
 
   test('init with a locked Daily for today produces a GameOver model reconstructed from the record', () => {
@@ -286,7 +443,10 @@ describe('update', () => {
         dailyNumber: 158,
         seed: 456,
         score: 4,
+        streak: 7,
       }),
+      prevStreak: 7,
+      prevLastPlayedDayKey: Option.some('2026-06-07'),
     })
     expect(model.status).toBe('GameOver')
     expect(model.mode).toBe('Daily')
@@ -298,6 +458,8 @@ describe('update', () => {
     expect(model.board).toEqual(generateBoard(456, 4))
     expect(model.best).toBe(5)
     expect(model.isNewBest).toBe(false)
+    expect(model.streak).toBe(7)
+    expect(model.lastPlayedDayKey).toBe('2026-06-07')
     expect(commands).toEqual([])
   })
 
@@ -420,11 +582,23 @@ describe('flags', () => {
   test('produces a locked Daily when a record for today is persisted', async () => {
     const today = dayKey(new Date())
     await provideStore(
-      saveDailyRecord({ dayKey: today, dailyNumber: 158, seed: 9, score: 4 }),
+      saveDailyRecord({
+        dayKey: today,
+        dailyNumber: 158,
+        seed: 9,
+        score: 4,
+        streak: 3,
+      }),
     )
     const result = await Effect.runPromise(flags)
     expect(result.maybeLockedDaily).toStrictEqual(
-      Option.some({ dayKey: today, dailyNumber: 158, seed: 9, score: 4 }),
+      Option.some({
+        dayKey: today,
+        dailyNumber: 158,
+        seed: 9,
+        score: 4,
+        streak: 3,
+      }),
     )
   })
 
@@ -435,6 +609,7 @@ describe('flags', () => {
         dailyNumber: 1,
         seed: 1,
         score: 1,
+        streak: 1,
       }),
     )
     const result = await Effect.runPromise(flags)
@@ -444,5 +619,26 @@ describe('flags', () => {
   test('produces None when no Daily record is persisted', async () => {
     const result = await Effect.runPromise(flags)
     expect(result.maybeLockedDaily).toStrictEqual(Option.none())
+  })
+
+  test('carries the prior Daily streak and last-played day forward from a different-day record', async () => {
+    await provideStore(
+      saveDailyRecord({
+        dayKey: '2000-01-01',
+        dailyNumber: 1,
+        seed: 1,
+        score: 1,
+        streak: 6,
+      }),
+    )
+    const result = await Effect.runPromise(flags)
+    expect(result.prevStreak).toBe(6)
+    expect(result.prevLastPlayedDayKey).toStrictEqual(Option.some('2000-01-01'))
+  })
+
+  test('reports a zero prevStreak and None last-played day when nothing is persisted', async () => {
+    const result = await Effect.runPromise(flags)
+    expect(result.prevStreak).toBe(0)
+    expect(result.prevLastPlayedDayKey).toStrictEqual(Option.none())
   })
 })

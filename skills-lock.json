@@ -1,0 +1,29 @@
+{
+  "version": 1,
+  "skills": {
+    "audit-program": {
+      "source": "foldkit/foldkit",
+      "sourceType": "github",
+      "skillPath": "skills/audit-program/SKILL.md",
+      "computedHash": "bb477b1dda2c06993f22a4a96a0735c6b7ac1dfd590a1eb0f71e2cefe6d1b07e"
+    },
+    "effect-ts": {
+      "source": "paulrberg/agent-skills",
+      "sourceType": "github",
+      "skillPath": "skills/effect-ts/SKILL.md",
+      "computedHash": "411ecb90eca80c851bef6448c88d2d3e5ad57565627b6992edb3644055663f34"
+    },
+    "foldkit": {
+      "source": "foldkit/foldkit",
+      "sourceType": "github",
+      "skillPath": "skills/foldkit/SKILL.md",
+      "computedHash": "0c1276f51b7e695cbfd2fd928bfe92cda8aa8cecf5693982bf58e108205c1445"
+    },
+    "generate-program": {
+      "source": "foldkit/foldkit",
+      "sourceType": "github",
+      "skillPath": "skills/generate-program/SKILL.md",
+      "computedHash": "0a7f80d74aba0179d02453fa508134d0f790e939d1ee638f1004a28a12ab2092"
+    }
+  }
+}

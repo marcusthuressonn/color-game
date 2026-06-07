@@ -1,21 +1,30 @@
+import { BrowserKeyValueStore } from '@effect/platform-browser'
+import { Effect, Option } from 'effect'
+import { KeyValueStore } from 'effect/unstable/persistence'
 import { Story } from 'foldkit'
-import { describe, expect, test } from 'vitest'
+import { beforeEach, describe, expect, test } from 'vitest'
 
 import { generateBoard } from './board'
+import { dayKey } from './daily'
 import {
   Booted,
   ClickedPlayAgain,
   ClickedSelectMode,
   CompletedSaveBestScore,
+  CompletedSaveDailyRecord,
+  flags,
   GenerateDailySeed,
   GenerateRunSeed,
+  init,
   type Model,
   SaveBestScore,
+  SaveDailyRecord,
   StartedDailyRun,
   StartedNewRun,
   TappedTile,
   update,
 } from './main'
+import { saveDailyRecord } from './persistence'
 
 const TEST_SEED = 1
 
@@ -29,6 +38,7 @@ const initialModel: Model = {
   isNewBest: false,
   mode: 'Classic',
   dailyNumber: 0,
+  dailyDayKey: '',
 }
 
 describe('update', () => {
@@ -141,13 +151,14 @@ describe('update', () => {
       }),
       Story.Command.resolve(
         GenerateDailySeed,
-        StartedDailyRun({ seed: 456, dailyNumber: 158 }),
+        StartedDailyRun({ seed: 456, dailyNumber: 158, dayKey: '2026-06-07' }),
       ),
       Story.model(model => {
         expect(model.mode).toBe('Daily')
         expect(model.seed).toBe(456)
         expect(model.status).toBe('Playing')
         expect(model.dailyNumber).toBe(158)
+        expect(model.dailyDayKey).toBe('2026-06-07')
         expect(model.board).toEqual(generateBoard(456, 0))
       }),
     )
@@ -174,6 +185,7 @@ describe('update', () => {
       status: 'GameOver',
       score: 4,
       dailyNumber: 158,
+      dailyDayKey: '2026-06-07',
     }
 
     Story.story(
@@ -183,31 +195,110 @@ describe('update', () => {
       Story.Command.expectExact(GenerateDailySeed),
       Story.Command.resolve(
         GenerateDailySeed,
-        StartedDailyRun({ seed: 21, dailyNumber: 158 }),
+        StartedDailyRun({ seed: 21, dailyNumber: 158, dayKey: '2026-06-07' }),
       ),
       Story.model(model => {
         expect(model.mode).toBe('Daily')
         expect(model.status).toBe('Playing')
         expect(model.score).toBe(0)
         expect(model.dailyNumber).toBe(158)
+        expect(model.dailyDayKey).toBe('2026-06-07')
       }),
     )
   })
 
-  test('StartedDailyRun records the dailyNumber on the Model', () => {
+  test('StartedDailyRun records the dailyNumber and dayKey on the Model', () => {
     const dailyTitle: Model = { ...initialModel, status: 'Title', mode: 'Daily' }
 
     Story.story(
       update,
       Story.with(dailyTitle),
-      Story.message(StartedDailyRun({ seed: 777, dailyNumber: 159 })),
+      Story.message(
+        StartedDailyRun({ seed: 777, dailyNumber: 159, dayKey: '2026-06-08' }),
+      ),
       Story.model(model => {
         expect(model.mode).toBe('Daily')
         expect(model.status).toBe('Playing')
         expect(model.dailyNumber).toBe(159)
+        expect(model.dailyDayKey).toBe('2026-06-08')
         expect(model.seed).toBe(777)
       }),
     )
+  })
+
+  test('losing the Daily Run emits SaveDailyRecord with the current dayKey, dailyNumber, seed, and score', () => {
+    const dailyRunning: Model = {
+      ...initialModel,
+      mode: 'Daily',
+      best: 9,
+      seed: 456,
+      dailyNumber: 158,
+      dailyDayKey: '2026-06-07',
+      score: 3,
+      roundIndex: 3,
+      board: generateBoard(456, 3),
+    }
+    const nonTargetIndex =
+      dailyRunning.board.targetIndex === 0 ? 1 : dailyRunning.board.targetIndex - 1
+
+    Story.story(
+      update,
+      Story.with(dailyRunning),
+      Story.message(TappedTile({ index: nonTargetIndex })),
+      Story.Command.expectExact(SaveDailyRecord),
+      Story.model(model => {
+        expect(model.status).toBe('GameOver')
+        expect(model.mode).toBe('Daily')
+      }),
+      Story.Command.resolve(SaveDailyRecord, CompletedSaveDailyRecord()),
+    )
+  })
+
+  test('losing the Classic Run does not emit SaveDailyRecord', () => {
+    const classicRunning: Model = { ...initialModel, score: 2, best: 9 }
+    const nonTargetIndex =
+      classicRunning.board.targetIndex === 0 ? 1 : classicRunning.board.targetIndex - 1
+
+    Story.story(
+      update,
+      Story.with(classicRunning),
+      Story.message(TappedTile({ index: nonTargetIndex })),
+      Story.Command.expectNone(),
+    )
+  })
+
+  test('init with no locked Daily produces a Title model', () => {
+    const [model, commands] = init({
+      best: 5,
+      maybeLockedDaily: Option.none(),
+    })
+    expect(model.status).toBe('Title')
+    expect(model.best).toBe(5)
+    expect(model.mode).toBe('Classic')
+    expect(commands).toEqual([])
+  })
+
+  test('init with a locked Daily for today produces a GameOver model reconstructed from the record', () => {
+    const [model, commands] = init({
+      best: 5,
+      maybeLockedDaily: Option.some({
+        dayKey: '2026-06-07',
+        dailyNumber: 158,
+        seed: 456,
+        score: 4,
+      }),
+    })
+    expect(model.status).toBe('GameOver')
+    expect(model.mode).toBe('Daily')
+    expect(model.dailyNumber).toBe(158)
+    expect(model.dailyDayKey).toBe('2026-06-07')
+    expect(model.seed).toBe(456)
+    expect(model.score).toBe(4)
+    expect(model.roundIndex).toBe(4)
+    expect(model.board).toEqual(generateBoard(456, 4))
+    expect(model.best).toBe(5)
+    expect(model.isNewBest).toBe(false)
+    expect(commands).toEqual([])
   })
 
   test('ClickedPlayAgain issues a GenerateRunSeed Command and leaves the model unchanged', () => {
@@ -311,5 +402,47 @@ describe('update', () => {
         expect(model.score).toBe(0)
       }),
     )
+  })
+})
+
+describe('flags', () => {
+  beforeEach(() => {
+    localStorage.clear()
+  })
+
+  const provideStore = <A>(
+    effect: Effect.Effect<A, never, KeyValueStore.KeyValueStore>,
+  ) =>
+    Effect.runPromise(
+      effect.pipe(Effect.provide(BrowserKeyValueStore.layerLocalStorage)),
+    )
+
+  test('produces a locked Daily when a record for today is persisted', async () => {
+    const today = dayKey(new Date())
+    await provideStore(
+      saveDailyRecord({ dayKey: today, dailyNumber: 158, seed: 9, score: 4 }),
+    )
+    const result = await Effect.runPromise(flags)
+    expect(result.maybeLockedDaily).toStrictEqual(
+      Option.some({ dayKey: today, dailyNumber: 158, seed: 9, score: 4 }),
+    )
+  })
+
+  test('produces None when the persisted record is for a different day', async () => {
+    await provideStore(
+      saveDailyRecord({
+        dayKey: '2000-01-01',
+        dailyNumber: 1,
+        seed: 1,
+        score: 1,
+      }),
+    )
+    const result = await Effect.runPromise(flags)
+    expect(result.maybeLockedDaily).toStrictEqual(Option.none())
+  })
+
+  test('produces None when no Daily record is persisted', async () => {
+    const result = await Effect.runPromise(flags)
+    expect(result.maybeLockedDaily).toStrictEqual(Option.none())
   })
 })

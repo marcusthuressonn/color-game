@@ -1,3 +1,4 @@
+import { Option } from 'effect'
 import { Scene } from 'foldkit'
 import { describe, test } from 'vitest'
 
@@ -5,6 +6,7 @@ import { generateBoard } from './board'
 import {
   GenerateDailySeed,
   GenerateRunSeed,
+  init,
   type Model,
   StartedDailyRun,
   StartedNewRun,
@@ -24,6 +26,7 @@ const initialModel: Model = {
   isNewBest: false,
   mode: 'Classic',
   dailyNumber: 0,
+  dailyDayKey: '',
 }
 
 const titleModel: Model = { ...initialModel, status: 'Title' }
@@ -62,13 +65,67 @@ describe('scene', () => {
       Scene.Command.expectExact(GenerateDailySeed),
       Scene.Command.resolve(
         GenerateDailySeed,
-        StartedDailyRun({ seed: 7, dailyNumber: 158 }),
+        StartedDailyRun({ seed: 7, dailyNumber: 158, dayKey: '2026-06-07' }),
       ),
       Scene.expect(Scene.role('button', { name: 'Daily' })).not.toExist(),
       Scene.expect(Scene.role('grid', { name: 'Board' })).toExist(),
       Scene.expect(Scene.label('Score')).toHaveText('0'),
       Scene.expect(Scene.label('Mode')).toHaveText('Daily'),
       Scene.expect(Scene.label('Daily Number')).toHaveText('#158'),
+    )
+  })
+
+  test('Daily Game Over does not show a Play again button', () => {
+    const dailyGameOverModel: Model = {
+      ...initialModel,
+      status: 'GameOver',
+      mode: 'Daily',
+      score: 4,
+      dailyNumber: 158,
+      dailyDayKey: '2026-06-07',
+    }
+
+    Scene.scene(
+      { update, view },
+      Scene.with(dailyGameOverModel),
+      Scene.expect(Scene.role('dialog', { name: 'Game Over' })).toExist(),
+      Scene.expect(Scene.role('button', { name: 'Play again' })).not.toExist(),
+    )
+  })
+
+  test('init with a locked Daily for today shows the locked result and not a fresh Board', () => {
+    const [lockedModel] = init({
+      best: 3,
+      maybeLockedDaily: Option.some({
+        dayKey: '2026-06-07',
+        dailyNumber: 158,
+        seed: 99,
+        score: 5,
+      }),
+    })
+
+    Scene.scene(
+      { update, view },
+      Scene.with(lockedModel),
+      Scene.expect(Scene.role('dialog', { name: 'Game Over' })).toExist(),
+      Scene.expect(Scene.label('Final Score')).toHaveText('5'),
+      Scene.expect(Scene.label('Mode')).toHaveText('Daily'),
+      Scene.expect(Scene.label('Daily Number')).toHaveText('#158'),
+      Scene.expect(Scene.role('button', { name: 'Play again' })).not.toExist(),
+      Scene.expect(Scene.role('button', { name: 'Classic' })).not.toExist(),
+      Scene.expect(Scene.role('button', { name: 'Daily' })).not.toExist(),
+    )
+  })
+
+  test('init with no locked Daily shows the Title screen', () => {
+    const [freshModel] = init({ best: 7, maybeLockedDaily: Option.none() })
+
+    Scene.scene(
+      { update, view },
+      Scene.with(freshModel),
+      Scene.expect(Scene.role('button', { name: 'Classic' })).toExist(),
+      Scene.expect(Scene.role('button', { name: 'Daily' })).toExist(),
+      Scene.expect(Scene.label('Best Score')).toHaveText('7'),
     )
   })
 

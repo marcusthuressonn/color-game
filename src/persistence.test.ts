@@ -3,7 +3,15 @@ import { Effect, Option } from 'effect'
 import { KeyValueStore } from 'effect/unstable/persistence'
 import { beforeEach, describe, expect, test } from 'vitest'
 
-import { BEST_SCORE_KEY, loadBestScore, saveBestScore } from './persistence'
+import {
+  BEST_SCORE_KEY,
+  DAILY_RECORD_KEY,
+  type DailyRecord,
+  loadBestScore,
+  loadDailyRecord,
+  saveBestScore,
+  saveDailyRecord,
+} from './persistence'
 
 const provide = <A>(effect: Effect.Effect<A, never, KeyValueStore.KeyValueStore>) =>
   Effect.runPromise(
@@ -36,6 +44,55 @@ describe('Persistence', () => {
   test('loadBestScore returns None when stored value is not a valid number', async () => {
     localStorage.setItem(BEST_SCORE_KEY, 'not-a-number')
     const result = await provide(loadBestScore)
+    expect(result).toStrictEqual(Option.none())
+  })
+
+  test('loadDailyRecord returns None when no value is stored', async () => {
+    const result = await provide(loadDailyRecord)
+    expect(result).toStrictEqual(Option.none())
+  })
+
+  test('saveDailyRecord writes a record that loadDailyRecord reads back', async () => {
+    const record: DailyRecord = {
+      dayKey: '2026-06-07',
+      dailyNumber: 158,
+      seed: 12345,
+      score: 4,
+    }
+    await provide(saveDailyRecord(record))
+    const result = await provide(loadDailyRecord)
+    expect(result).toStrictEqual(Option.some(record))
+  })
+
+  test('saveDailyRecord overwrites the previous Daily record', async () => {
+    await provide(
+      saveDailyRecord({
+        dayKey: '2026-06-06',
+        dailyNumber: 157,
+        seed: 1,
+        score: 0,
+      }),
+    )
+    const replacement: DailyRecord = {
+      dayKey: '2026-06-07',
+      dailyNumber: 158,
+      seed: 9,
+      score: 6,
+    }
+    await provide(saveDailyRecord(replacement))
+    const result = await provide(loadDailyRecord)
+    expect(result).toStrictEqual(Option.some(replacement))
+  })
+
+  test('loadDailyRecord returns None when stored value is not valid JSON', async () => {
+    localStorage.setItem(DAILY_RECORD_KEY, '{not-json}')
+    const result = await provide(loadDailyRecord)
+    expect(result).toStrictEqual(Option.none())
+  })
+
+  test('loadDailyRecord returns None when stored JSON is missing required fields', async () => {
+    localStorage.setItem(DAILY_RECORD_KEY, '{"dayKey":"2026-06-07"}')
+    const result = await provide(loadDailyRecord)
     expect(result).toStrictEqual(Option.none())
   })
 })

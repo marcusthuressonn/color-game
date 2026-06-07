@@ -6,9 +6,15 @@ import { m } from 'foldkit/message'
 
 import { Board, generateBoard } from './board'
 import { type OkLch, oklchToSrgb, srgbToCss } from './color'
-import { dailyNumber, dailySeed } from './daily'
+import { dailyNumber, dailySeed, dayKey } from './daily'
 import { Mode } from './mode'
-import { loadBestScore, saveBestScore } from './persistence'
+import {
+  DailyRecord,
+  loadBestScore,
+  loadDailyRecord,
+  saveBestScore,
+  saveDailyRecord,
+} from './persistence'
 
 const INITIAL_SEED = 0xc010_4eed
 const INITIAL_ROUND_INDEX = 0
@@ -28,6 +34,7 @@ export const Model = S.Struct({
   isNewBest: S.Boolean,
   mode: Mode,
   dailyNumber: S.Number,
+  dailyDayKey: S.String,
 })
 export type Model = typeof Model.Type
 
@@ -35,15 +42,23 @@ export type Model = typeof Model.Type
 
 export const Flags = S.Struct({
   best: S.Number,
+  maybeLockedDaily: S.Option(DailyRecord),
 })
 export type Flags = typeof Flags.Type
 
-export const flags: Effect.Effect<Flags> = loadBestScore.pipe(
-  Effect.map(maybeBest =>
-    Flags.make({ best: Option.getOrElse(maybeBest, () => 0) }),
-  ),
-  Effect.provide(BrowserKeyValueStore.layerLocalStorage),
-)
+export const flags: Effect.Effect<Flags> = Effect.gen(function* () {
+  const maybeBest = yield* loadBestScore
+  const maybeRecord = yield* loadDailyRecord
+  const now = yield* Clock.currentTimeMillis
+  const today = dayKey(new Date(now))
+  const maybeLockedDaily = Option.flatMap(maybeRecord, record =>
+    record.dayKey === today ? Option.some(record) : Option.none(),
+  )
+  return Flags.make({
+    best: Option.getOrElse(maybeBest, () => 0),
+    maybeLockedDaily,
+  })
+}).pipe(Effect.provide(BrowserKeyValueStore.layerLocalStorage))
 
 // MESSAGE
 
@@ -55,8 +70,10 @@ export const StartedNewRun = m('StartedNewRun', { seed: S.Number })
 export const StartedDailyRun = m('StartedDailyRun', {
   seed: S.Number,
   dailyNumber: S.Number,
+  dayKey: S.String,
 })
 export const CompletedSaveBestScore = m('CompletedSaveBestScore')
+export const CompletedSaveDailyRecord = m('CompletedSaveDailyRecord')
 
 export const Message = S.Union([
   Booted,
@@ -66,6 +83,7 @@ export const Message = S.Union([
   StartedNewRun,
   StartedDailyRun,
   CompletedSaveBestScore,
+  CompletedSaveDailyRecord,
 ])
 export type Message = typeof Message.Type
 
@@ -85,6 +103,7 @@ export const GenerateDailySeed = Command.define(
     return StartedDailyRun({
       seed: dailySeed(today),
       dailyNumber: dailyNumber(today),
+      dayKey: dayKey(today),
     })
   }),
 )
@@ -100,6 +119,17 @@ export const SaveBestScore = Command.define(
   ),
 )
 
+export const SaveDailyRecord = Command.define(
+  'SaveDailyRecord',
+  { record: DailyRecord },
+  CompletedSaveDailyRecord,
+)(({ record }) =>
+  saveDailyRecord(record).pipe(
+    Effect.as(CompletedSaveDailyRecord()),
+    Effect.provide(BrowserKeyValueStore.layerLocalStorage),
+  ),
+)
+
 // UPDATE
 
 const freshModel = (
@@ -107,6 +137,7 @@ const freshModel = (
   best: number,
   mode: Mode,
   dailyNumber: number,
+  dailyDayKey: string,
 ): Model => ({
   seed,
   roundIndex: INITIAL_ROUND_INDEX,
@@ -117,11 +148,25 @@ const freshModel = (
   isNewBest: false,
   mode,
   dailyNumber,
+  dailyDayKey,
 })
 
 const titleModel = (best: number): Model => ({
-  ...freshModel(INITIAL_SEED, best, 'Classic', 0),
+  ...freshModel(INITIAL_SEED, best, 'Classic', 0, ''),
   status: 'Title',
+})
+
+const lockedDailyModel = (record: DailyRecord, best: number): Model => ({
+  seed: record.seed,
+  roundIndex: record.score,
+  board: generateBoard(record.seed, record.score),
+  score: record.score,
+  status: 'GameOver',
+  best,
+  isNewBest: false,
+  mode: 'Daily',
+  dailyNumber: record.dailyNumber,
+  dailyDayKey: record.dayKey,
 })
 
 const seedRunForMode = (mode: Mode): Command.Command<Message> =>
@@ -149,7 +194,23 @@ export const update = (
             best: isNewBest ? model.score : model.best,
             isNewBest,
           }
-          return [nextModel, isNewBest ? [SaveBestScore({ score: model.score })] : []]
+          const bestCommands = isNewBest
+            ? [SaveBestScore({ score: model.score })]
+            : []
+          const dailyCommands =
+            model.mode === 'Daily'
+              ? [
+                  SaveDailyRecord({
+                    record: {
+                      dayKey: model.dailyDayKey,
+                      dailyNumber: model.dailyNumber,
+                      seed: model.seed,
+                      score: model.score,
+                    },
+                  }),
+                ]
+              : []
+          return [nextModel, [...bestCommands, ...dailyCommands]]
         }
         const nextRoundIndex = model.roundIndex + 1
         return [
@@ -165,23 +226,28 @@ export const update = (
       ClickedSelectMode: ({ mode }) => [{ ...model, mode }, [seedRunForMode(mode)]],
       ClickedPlayAgain: () => [model, [seedRunForMode(model.mode)]],
       StartedNewRun: ({ seed }) => [
-        freshModel(seed, model.best, model.mode, 0),
+        freshModel(seed, model.best, model.mode, 0, ''),
         [],
       ],
-      StartedDailyRun: ({ seed, dailyNumber }) => [
-        freshModel(seed, model.best, 'Daily', dailyNumber),
+      StartedDailyRun: ({ seed, dailyNumber, dayKey }) => [
+        freshModel(seed, model.best, 'Daily', dailyNumber, dayKey),
         [],
       ],
       CompletedSaveBestScore: () => [model, []],
+      CompletedSaveDailyRecord: () => [model, []],
     }),
   )
 
 // INIT
 
-export const init: Runtime.ProgramInit<Model, Message, Flags> = ({ best }) => [
-  titleModel(best),
-  [],
-]
+export const init: Runtime.ProgramInit<Model, Message, Flags> = ({
+  best,
+  maybeLockedDaily,
+}) =>
+  Option.match(maybeLockedDaily, {
+    onNone: () => [titleModel(best), []],
+    onSome: record => [lockedDailyModel(record, best), []],
+  })
 
 // VIEW
 
@@ -243,7 +309,15 @@ const bestScoreView = (best: number): Html =>
 const newBestFlourish = (): Html =>
   p([Class('new-best'), AriaLabel('New Best')], ['New best!'])
 
-const gameOverView = (score: number, best: number, isNewBest: boolean): Html =>
+const playAgainButton = (): Html =>
+  button([Class('play-again'), OnClick(ClickedPlayAgain())], ['Play again'])
+
+const gameOverView = (
+  score: number,
+  best: number,
+  isNewBest: boolean,
+  mode: Mode,
+): Html =>
   div(
     [Role('dialog'), AriaLabel('Game Over'), Class('game-over')],
     [
@@ -251,7 +325,7 @@ const gameOverView = (score: number, best: number, isNewBest: boolean): Html =>
       p([Class('game-over-score'), AriaLabel('Final Score')], [score.toString()]),
       bestScoreView(best),
       ...(isNewBest ? [newBestFlourish()] : []),
-      button([Class('play-again'), OnClick(ClickedPlayAgain())], ['Play again']),
+      ...(mode === 'Daily' ? [] : [playAgainButton()]),
     ],
   )
 
@@ -294,7 +368,7 @@ const statusView = (model: Model): ReadonlyArray<Html> =>
       ...dailyBadges(model.mode, model.dailyNumber),
       scoreView(model.score),
       boardView(model.board, true),
-      gameOverView(model.score, model.best, model.isNewBest),
+      gameOverView(model.score, model.best, model.isNewBest, model.mode),
     ]),
     M.exhaustive,
   )

@@ -242,3 +242,17 @@ body {
   font-weight: 500;
   color: #666;
 }
+
+.total-time {
+  margin: 0;
+  font-size: 1rem;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  color: #111;
+}
+
+.total-time::before {
+  content: 'Total Time ';
+  font-weight: 500;
+  color: #666;
+}

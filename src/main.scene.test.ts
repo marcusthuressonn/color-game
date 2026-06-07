@@ -29,6 +29,8 @@ const initialModel: Model = {
   dailyDayKey: '',
   streak: 0,
   lastPlayedDayKey: '',
+  runStartedAtMs: 0,
+  totalTimeMs: 0,
 }
 
 const titleModel: Model = { ...initialModel, status: 'Title' }
@@ -67,7 +69,12 @@ describe('scene', () => {
       Scene.Command.expectExact(GenerateDailySeed),
       Scene.Command.resolve(
         GenerateDailySeed,
-        StartedDailyRun({ seed: 7, dailyNumber: 158, dayKey: '2026-06-07' }),
+        StartedDailyRun({
+          seed: 7,
+          dailyNumber: 158,
+          dayKey: '2026-06-07',
+          startedAtMs: 1_000,
+        }),
       ),
       Scene.expect(Scene.role('button', { name: 'Daily' })).not.toExist(),
       Scene.expect(Scene.role('grid', { name: 'Board' })).toExist(),
@@ -114,6 +121,42 @@ describe('scene', () => {
     )
   })
 
+  test('Daily Game Over surfaces the Total Time formatted in seconds', () => {
+    const dailyGameOverModel: Model = {
+      ...initialModel,
+      status: 'GameOver',
+      mode: 'Daily',
+      score: 4,
+      dailyNumber: 158,
+      dailyDayKey: '2026-06-07',
+      streak: 5,
+      lastPlayedDayKey: '2026-06-07',
+      totalTimeMs: 12_345,
+    }
+
+    Scene.scene(
+      { update, view },
+      Scene.with(dailyGameOverModel),
+      Scene.expect(Scene.label('Total Time')).toHaveText('12.3s'),
+    )
+  })
+
+  test('Classic Game Over does not surface a Total Time', () => {
+    const classicGameOverModel: Model = {
+      ...initialModel,
+      status: 'GameOver',
+      mode: 'Classic',
+      score: 4,
+      totalTimeMs: 9_999,
+    }
+
+    Scene.scene(
+      { update, view },
+      Scene.with(classicGameOverModel),
+      Scene.expect(Scene.label('Total Time')).not.toExist(),
+    )
+  })
+
   test('Classic Game Over does not surface a Streak', () => {
     const classicGameOverModel: Model = {
       ...initialModel,
@@ -140,6 +183,7 @@ describe('scene', () => {
         seed: 99,
         score: 5,
         streak: 4,
+        totalTimeMs: 31_500,
       }),
       prevStreak: 4,
       prevLastPlayedDayKey: Option.some('2026-06-07'),
@@ -153,6 +197,7 @@ describe('scene', () => {
       Scene.expect(Scene.label('Mode')).toHaveText('Daily'),
       Scene.expect(Scene.label('Daily Number')).toHaveText('#158'),
       Scene.expect(Scene.label('Streak')).toHaveText('4'),
+      Scene.expect(Scene.label('Total Time')).toHaveText('31.5s'),
       Scene.expect(Scene.role('button', { name: 'Play again' })).not.toExist(),
       Scene.expect(Scene.role('button', { name: 'Classic' })).not.toExist(),
       Scene.expect(Scene.role('button', { name: 'Daily' })).not.toExist(),

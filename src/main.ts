@@ -6,7 +6,13 @@ import { m } from 'foldkit/message'
 
 import { Board, generateBoard } from './board'
 import { type OkLch, oklchToSrgb, srgbToCss } from './color'
-import { dailyNumber, dailySeed, dayKey, streakTransition } from './daily'
+import {
+  dailyNumber,
+  dailySeed,
+  dayKey,
+  formatTotalTime,
+  streakTransition,
+} from './daily'
 import { Mode } from './mode'
 import {
   DailyRecord,
@@ -37,6 +43,8 @@ export const Model = S.Struct({
   dailyDayKey: S.String,
   streak: S.Number,
   lastPlayedDayKey: S.String,
+  runStartedAtMs: S.Number,
+  totalTimeMs: S.Number,
 })
 export type Model = typeof Model.Type
 
@@ -74,9 +82,12 @@ export const StartedDailyRun = m('StartedDailyRun', {
   seed: S.Number,
   dailyNumber: S.Number,
   dayKey: S.String,
+  startedAtMs: S.Number,
 })
 export const CompletedSaveBestScore = m('CompletedSaveBestScore')
-export const CompletedSaveDailyRecord = m('CompletedSaveDailyRecord')
+export const CompletedSaveDailyRecord = m('CompletedSaveDailyRecord', {
+  totalTimeMs: S.Number,
+})
 
 export const Message = S.Union([
   Booted,
@@ -102,11 +113,13 @@ export const GenerateDailySeed = Command.define(
   StartedDailyRun,
 )(
   Effect.gen(function* () {
-    const today = new Date(yield* Clock.currentTimeMillis)
+    const startedAtMs = yield* Clock.currentTimeMillis
+    const today = new Date(startedAtMs)
     return StartedDailyRun({
       seed: dailySeed(today),
       dailyNumber: dailyNumber(today),
       dayKey: dayKey(today),
+      startedAtMs,
     })
   }),
 )
@@ -124,13 +137,30 @@ export const SaveBestScore = Command.define(
 
 export const SaveDailyRecord = Command.define(
   'SaveDailyRecord',
-  { record: DailyRecord },
+  {
+    startedAtMs: S.Number,
+    dayKey: S.String,
+    dailyNumber: S.Number,
+    seed: S.Number,
+    score: S.Number,
+    streak: S.Number,
+  },
   CompletedSaveDailyRecord,
-)(({ record }) =>
-  saveDailyRecord(record).pipe(
-    Effect.as(CompletedSaveDailyRecord()),
-    Effect.provide(BrowserKeyValueStore.layerLocalStorage),
-  ),
+)(({ startedAtMs, dayKey, dailyNumber, seed, score, streak }) =>
+  Effect.gen(function* () {
+    const endedAtMs = yield* Clock.currentTimeMillis
+    const totalTimeMs = endedAtMs - startedAtMs
+    const record: DailyRecord = {
+      dayKey,
+      dailyNumber,
+      seed,
+      score,
+      streak,
+      totalTimeMs,
+    }
+    yield* saveDailyRecord(record)
+    return CompletedSaveDailyRecord({ totalTimeMs })
+  }).pipe(Effect.provide(BrowserKeyValueStore.layerLocalStorage)),
 )
 
 // UPDATE
@@ -143,6 +173,7 @@ const freshModel = (
   dailyDayKey: string,
   streak: number,
   lastPlayedDayKey: string,
+  runStartedAtMs: number,
 ): Model => ({
   seed,
   roundIndex: INITIAL_ROUND_INDEX,
@@ -156,6 +187,8 @@ const freshModel = (
   dailyDayKey,
   streak,
   lastPlayedDayKey,
+  runStartedAtMs,
+  totalTimeMs: 0,
 })
 
 const titleModel = (
@@ -163,7 +196,7 @@ const titleModel = (
   streak: number,
   lastPlayedDayKey: string,
 ): Model => ({
-  ...freshModel(INITIAL_SEED, best, 'Classic', 0, '', streak, lastPlayedDayKey),
+  ...freshModel(INITIAL_SEED, best, 'Classic', 0, '', streak, lastPlayedDayKey, 0),
   status: 'Title',
 })
 
@@ -180,6 +213,8 @@ const lockedDailyModel = (record: DailyRecord, best: number): Model => ({
   dailyDayKey: record.dayKey,
   streak: record.streak,
   lastPlayedDayKey: record.dayKey,
+  runStartedAtMs: 0,
+  totalTimeMs: record.totalTimeMs,
 })
 
 const seedRunForMode = (mode: Mode): Command.Command<Message> =>
@@ -226,13 +261,12 @@ export const update = (
           const dailyCommands = isDaily
             ? [
                 SaveDailyRecord({
-                  record: {
-                    dayKey: model.dailyDayKey,
-                    dailyNumber: model.dailyNumber,
-                    seed: model.seed,
-                    score: model.score,
-                    streak: nextStreak,
-                  },
+                  startedAtMs: model.runStartedAtMs,
+                  dayKey: model.dailyDayKey,
+                  dailyNumber: model.dailyNumber,
+                  seed: model.seed,
+                  score: model.score,
+                  streak: nextStreak,
                 }),
               ]
             : []
@@ -252,10 +286,10 @@ export const update = (
       ClickedSelectMode: ({ mode }) => [{ ...model, mode }, [seedRunForMode(mode)]],
       ClickedPlayAgain: () => [model, [seedRunForMode(model.mode)]],
       StartedNewRun: ({ seed }) => [
-        freshModel(seed, model.best, model.mode, 0, '', model.streak, model.lastPlayedDayKey),
+        freshModel(seed, model.best, model.mode, 0, '', model.streak, model.lastPlayedDayKey, 0),
         [],
       ],
-      StartedDailyRun: ({ seed, dailyNumber, dayKey }) => [
+      StartedDailyRun: ({ seed, dailyNumber, dayKey, startedAtMs }) => [
         freshModel(
           seed,
           model.best,
@@ -264,11 +298,12 @@ export const update = (
           dayKey,
           model.streak,
           model.lastPlayedDayKey,
+          startedAtMs,
         ),
         [],
       ],
       CompletedSaveBestScore: () => [model, []],
-      CompletedSaveDailyRecord: () => [model, []],
+      CompletedSaveDailyRecord: ({ totalTimeMs }) => [{ ...model, totalTimeMs }, []],
     }),
   )
 
@@ -354,12 +389,16 @@ const playAgainButton = (): Html =>
 const streakView = (streak: number): Html =>
   p([Class('streak'), AriaLabel('Streak')], [streak.toString()])
 
+const totalTimeView = (totalTimeMs: number): Html =>
+  p([Class('total-time'), AriaLabel('Total Time')], [formatTotalTime(totalTimeMs)])
+
 const gameOverView = (
   score: number,
   best: number,
   isNewBest: boolean,
   mode: Mode,
   streak: number,
+  totalTimeMs: number,
 ): Html =>
   div(
     [Role('dialog'), AriaLabel('Game Over'), Class('game-over')],
@@ -368,7 +407,9 @@ const gameOverView = (
       p([Class('game-over-score'), AriaLabel('Final Score')], [score.toString()]),
       bestScoreView(best),
       ...(isNewBest ? [newBestFlourish()] : []),
-      ...(mode === 'Daily' ? [streakView(streak)] : [playAgainButton()]),
+      ...(mode === 'Daily'
+        ? [streakView(streak), totalTimeView(totalTimeMs)]
+        : [playAgainButton()]),
     ],
   )
 
@@ -411,7 +452,14 @@ const statusView = (model: Model): ReadonlyArray<Html> =>
       ...dailyBadges(model.mode, model.dailyNumber),
       scoreView(model.score),
       boardView(model.board, true),
-      gameOverView(model.score, model.best, model.isNewBest, model.mode, model.streak),
+      gameOverView(
+        model.score,
+        model.best,
+        model.isNewBest,
+        model.mode,
+        model.streak,
+        model.totalTimeMs,
+      ),
     ]),
     M.exhaustive,
   )

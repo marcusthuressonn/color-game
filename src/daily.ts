@@ -88,3 +88,27 @@ export const streakTransition = (
       return gapDays === 1 ? prevStreak + 1 : 1
     },
   })
+
+/**
+ * A Daily result viewed through the ranking lens: just the two axes that
+ * order the leaderboard, nothing more.
+ */
+export type DailyResult = {
+  score: number
+  totalTimeMs: number
+}
+
+/**
+ * Order two Daily results: higher Score ranks ahead, and equal Scores are
+ * broken by Total Time (faster ranks ahead). Suitable as an Array.sort
+ * comparator — negative when `a` ranks ahead of `b`.
+ */
+export const compareDailyResults = (a: DailyResult, b: DailyResult): number =>
+  a.score !== b.score ? b.score - a.score : a.totalTimeMs - b.totalTimeMs
+
+/**
+ * Format a Total Time as a player-facing string: seconds with one decimal
+ * place (e.g. `12.3s`).
+ */
+export const formatTotalTime = (totalTimeMs: number): string =>
+  `${(totalTimeMs / 1000).toFixed(1)}s`

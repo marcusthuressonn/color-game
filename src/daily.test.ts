@@ -2,10 +2,12 @@ import { Array, Option } from 'effect'
 import { describe, expect, test } from 'vitest'
 
 import {
+  compareDailyResults,
   DAILY_EPOCH_DAY_KEY,
   dailyNumber,
   dailySeed,
   dayKey,
+  formatTotalTime,
   streakTransition,
 } from './daily'
 
@@ -130,5 +132,88 @@ describe('streakTransition', () => {
     // The signature is (prevStreak, lastPlayedDayKey, todayDayKey) with no
     // Score parameter, so a poor result simply cannot affect the streak.
     expect(streakTransition.length).toBe(3)
+  })
+})
+
+describe('compareDailyResults', () => {
+  test('higher Score ranks ahead of lower Score regardless of Total Time', () => {
+    expect(
+      compareDailyResults(
+        { score: 5, totalTimeMs: 60_000 },
+        { score: 3, totalTimeMs: 1_000 },
+      ),
+    ).toBeLessThan(0)
+  })
+
+  test('lower Score ranks behind higher Score', () => {
+    expect(
+      compareDailyResults(
+        { score: 2, totalTimeMs: 1_000 },
+        { score: 7, totalTimeMs: 60_000 },
+      ),
+    ).toBeGreaterThan(0)
+  })
+
+  test('equal Scores: the faster Total Time ranks ahead', () => {
+    expect(
+      compareDailyResults(
+        { score: 4, totalTimeMs: 12_000 },
+        { score: 4, totalTimeMs: 19_000 },
+      ),
+    ).toBeLessThan(0)
+  })
+
+  test('equal Scores: the slower Total Time ranks behind', () => {
+    expect(
+      compareDailyResults(
+        { score: 4, totalTimeMs: 19_000 },
+        { score: 4, totalTimeMs: 12_000 },
+      ),
+    ).toBeGreaterThan(0)
+  })
+
+  test('identical results compare equal', () => {
+    expect(
+      compareDailyResults(
+        { score: 4, totalTimeMs: 12_000 },
+        { score: 4, totalTimeMs: 12_000 },
+      ),
+    ).toBe(0)
+  })
+
+  test('sorts a leaderboard: highest Score first, faster within a Score tier', () => {
+    const results = [
+      { score: 3, totalTimeMs: 1_000 },
+      { score: 5, totalTimeMs: 25_000 },
+      { score: 5, totalTimeMs: 18_000 },
+      { score: 4, totalTimeMs: 9_000 },
+      { score: 5, totalTimeMs: 18_000 },
+    ]
+    const sorted = [...results].sort(compareDailyResults)
+    expect(sorted).toEqual([
+      { score: 5, totalTimeMs: 18_000 },
+      { score: 5, totalTimeMs: 18_000 },
+      { score: 5, totalTimeMs: 25_000 },
+      { score: 4, totalTimeMs: 9_000 },
+      { score: 3, totalTimeMs: 1_000 },
+    ])
+  })
+})
+
+describe('formatTotalTime', () => {
+  test('renders seconds with one decimal place', () => {
+    expect(formatTotalTime(12_345)).toBe('12.3s')
+  })
+
+  test('renders sub-second times with one decimal place', () => {
+    expect(formatTotalTime(500)).toBe('0.5s')
+  })
+
+  test('renders zero as 0.0s', () => {
+    expect(formatTotalTime(0)).toBe('0.0s')
+  })
+
+  test('rounds half-second boundaries to one decimal', () => {
+    expect(formatTotalTime(1_550)).toBe('1.6s')
   })
 })

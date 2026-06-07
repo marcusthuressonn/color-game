@@ -59,6 +59,7 @@ describe('Persistence', () => {
       seed: 12345,
       score: 4,
       streak: 1,
+      totalTimeMs: 31_200,
     }
     await provide(saveDailyRecord(record))
     const result = await provide(loadDailyRecord)
@@ -73,6 +74,7 @@ describe('Persistence', () => {
         seed: 1,
         score: 0,
         streak: 4,
+        totalTimeMs: 1_000,
       }),
     )
     const replacement: DailyRecord = {
@@ -81,6 +83,7 @@ describe('Persistence', () => {
       seed: 9,
       score: 6,
       streak: 5,
+      totalTimeMs: 42_500,
     }
     await provide(saveDailyRecord(replacement))
     const result = await provide(loadDailyRecord)
@@ -94,6 +97,21 @@ describe('Persistence', () => {
       seed: 1,
       score: 3,
       streak: 12,
+      totalTimeMs: 17_800,
+    }
+    await provide(saveDailyRecord(record))
+    const result = await provide(loadDailyRecord)
+    expect(result).toStrictEqual(Option.some(record))
+  })
+
+  test('saveDailyRecord persists the totalTimeMs across reloads', async () => {
+    const record: DailyRecord = {
+      dayKey: '2026-06-07',
+      dailyNumber: 158,
+      seed: 1,
+      score: 3,
+      streak: 4,
+      totalTimeMs: 123_456,
     }
     await provide(saveDailyRecord(record))
     const result = await provide(loadDailyRecord)

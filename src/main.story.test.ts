@@ -41,6 +41,8 @@ const initialModel: Model = {
   dailyDayKey: '',
   streak: 0,
   lastPlayedDayKey: '',
+  runStartedAtMs: 0,
+  totalTimeMs: 0,
 }
 
 describe('update', () => {
@@ -153,7 +155,12 @@ describe('update', () => {
       }),
       Story.Command.resolve(
         GenerateDailySeed,
-        StartedDailyRun({ seed: 456, dailyNumber: 158, dayKey: '2026-06-07' }),
+        StartedDailyRun({
+          seed: 456,
+          dailyNumber: 158,
+          dayKey: '2026-06-07',
+          startedAtMs: 1_000,
+        }),
       ),
       Story.model(model => {
         expect(model.mode).toBe('Daily')
@@ -197,7 +204,12 @@ describe('update', () => {
       Story.Command.expectExact(GenerateDailySeed),
       Story.Command.resolve(
         GenerateDailySeed,
-        StartedDailyRun({ seed: 21, dailyNumber: 158, dayKey: '2026-06-07' }),
+        StartedDailyRun({
+          seed: 21,
+          dailyNumber: 158,
+          dayKey: '2026-06-07',
+          startedAtMs: 2_000,
+        }),
       ),
       Story.model(model => {
         expect(model.mode).toBe('Daily')
@@ -216,7 +228,12 @@ describe('update', () => {
       update,
       Story.with(dailyTitle),
       Story.message(
-        StartedDailyRun({ seed: 777, dailyNumber: 159, dayKey: '2026-06-08' }),
+        StartedDailyRun({
+          seed: 777,
+          dailyNumber: 159,
+          dayKey: '2026-06-08',
+          startedAtMs: 5_000,
+        }),
       ),
       Story.model(model => {
         expect(model.mode).toBe('Daily')
@@ -252,7 +269,7 @@ describe('update', () => {
         expect(model.status).toBe('GameOver')
         expect(model.mode).toBe('Daily')
       }),
-      Story.Command.resolve(SaveDailyRecord, CompletedSaveDailyRecord()),
+      Story.Command.resolve(SaveDailyRecord, CompletedSaveDailyRecord({ totalTimeMs: 0 })),
     )
   })
 
@@ -278,7 +295,7 @@ describe('update', () => {
       Story.with(dailyRunning),
       Story.message(TappedTile({ index: nonTargetIndex })),
       Story.Command.expectExact(SaveDailyRecord),
-      Story.Command.resolve(SaveDailyRecord, CompletedSaveDailyRecord()),
+      Story.Command.resolve(SaveDailyRecord, CompletedSaveDailyRecord({ totalTimeMs: 0 })),
       Story.model(model => {
         expect(model.streak).toBe(4)
         expect(model.lastPlayedDayKey).toBe('2026-06-08')
@@ -308,7 +325,7 @@ describe('update', () => {
       Story.with(dailyRunning),
       Story.message(TappedTile({ index: nonTargetIndex })),
       Story.Command.expectExact(SaveDailyRecord),
-      Story.Command.resolve(SaveDailyRecord, CompletedSaveDailyRecord()),
+      Story.Command.resolve(SaveDailyRecord, CompletedSaveDailyRecord({ totalTimeMs: 0 })),
       Story.model(model => {
         expect(model.streak).toBe(1)
         expect(model.lastPlayedDayKey).toBe('2026-06-10')
@@ -337,7 +354,7 @@ describe('update', () => {
       Story.with(dailyRunning),
       Story.message(TappedTile({ index: nonTargetIndex })),
       Story.Command.resolve(SaveBestScore, CompletedSaveBestScore()),
-      Story.Command.resolve(SaveDailyRecord, CompletedSaveDailyRecord()),
+      Story.Command.resolve(SaveDailyRecord, CompletedSaveDailyRecord({ totalTimeMs: 0 })),
       Story.model(model => {
         expect(model.streak).toBe(1)
         expect(model.lastPlayedDayKey).toBe('2026-06-07')
@@ -365,9 +382,87 @@ describe('update', () => {
       update,
       Story.with(dailyRunning),
       Story.message(TappedTile({ index: nonTargetIndex })),
-      Story.Command.resolve(SaveDailyRecord, CompletedSaveDailyRecord()),
+      Story.Command.resolve(SaveDailyRecord, CompletedSaveDailyRecord({ totalTimeMs: 0 })),
       Story.model(model => {
         expect(model.streak).toBe(8)
+      }),
+    )
+  })
+
+  test('StartedDailyRun records the start timestamp on the Model as runStartedAtMs', () => {
+    const dailyTitle: Model = { ...initialModel, status: 'Title', mode: 'Daily' }
+
+    Story.story(
+      update,
+      Story.with(dailyTitle),
+      Story.message(
+        StartedDailyRun({
+          seed: 1,
+          dailyNumber: 158,
+          dayKey: '2026-06-07',
+          startedAtMs: 1_700_000_000_000,
+        }),
+      ),
+      Story.model(model => {
+        expect(model.runStartedAtMs).toBe(1_700_000_000_000)
+        expect(model.totalTimeMs).toBe(0)
+      }),
+    )
+  })
+
+  test('losing the Daily Run preserves runStartedAtMs and writes the resolved Total Time onto the Model', () => {
+    const dailyRunning: Model = {
+      ...initialModel,
+      mode: 'Daily',
+      best: 9,
+      seed: 456,
+      dailyNumber: 158,
+      dailyDayKey: '2026-06-07',
+      score: 3,
+      roundIndex: 3,
+      board: generateBoard(456, 3),
+      runStartedAtMs: 1_700_000_000_000,
+    }
+    const nonTargetIndex =
+      dailyRunning.board.targetIndex === 0 ? 1 : dailyRunning.board.targetIndex - 1
+
+    Story.story(
+      update,
+      Story.with(dailyRunning),
+      Story.message(TappedTile({ index: nonTargetIndex })),
+      Story.Command.expectExact(SaveDailyRecord),
+      Story.model(model => {
+        expect(model.status).toBe('GameOver')
+        expect(model.runStartedAtMs).toBe(1_700_000_000_000)
+        expect(model.totalTimeMs).toBe(0)
+      }),
+      Story.Command.resolve(SaveDailyRecord, CompletedSaveDailyRecord({ totalTimeMs: 12_345 })),
+      Story.model(model => {
+        expect(model.totalTimeMs).toBe(12_345)
+      }),
+    )
+  })
+
+  test('CompletedSaveDailyRecord writes the captured Total Time onto the Model', () => {
+    const dailyGameOver: Model = {
+      ...initialModel,
+      mode: 'Daily',
+      status: 'GameOver',
+      seed: 456,
+      dailyNumber: 158,
+      dailyDayKey: '2026-06-07',
+      score: 3,
+      roundIndex: 3,
+      board: generateBoard(456, 3),
+      runStartedAtMs: 1_000_000,
+    }
+
+    Story.story(
+      update,
+      Story.with(dailyGameOver),
+      Story.message(CompletedSaveDailyRecord({ totalTimeMs: 27_500 })),
+      Story.model(model => {
+        expect(model.totalTimeMs).toBe(27_500)
       }),
     )
   })
@@ -444,6 +539,7 @@ describe('update', () => {
         seed: 456,
         score: 4,
         streak: 7,
+        totalTimeMs: 42_500,
       }),
       prevStreak: 7,
       prevLastPlayedDayKey: Option.some('2026-06-07'),
@@ -460,6 +556,7 @@ describe('update', () => {
     expect(model.isNewBest).toBe(false)
     expect(model.streak).toBe(7)
     expect(model.lastPlayedDayKey).toBe('2026-06-07')
+    expect(model.totalTimeMs).toBe(42_500)
     expect(commands).toEqual([])
   })
 
@@ -588,6 +685,7 @@ describe('flags', () => {
         seed: 9,
         score: 4,
         streak: 3,
+        totalTimeMs: 22_400,
       }),
     )
     const result = await Effect.runPromise(flags)
@@ -598,6 +696,7 @@ describe('flags', () => {
         seed: 9,
         score: 4,
         streak: 3,
+        totalTimeMs: 22_400,
       }),
     )
   })
@@ -610,6 +709,7 @@ describe('flags', () => {
         seed: 1,
         score: 1,
         streak: 1,
+        totalTimeMs: 0,
       }),
     )
     const result = await Effect.runPromise(flags)
@@ -629,6 +729,7 @@ describe('flags', () => {
         seed: 1,
         score: 1,
         streak: 6,
+        totalTimeMs: 0,
       }),
     )
     const result = await Effect.runPromise(flags)

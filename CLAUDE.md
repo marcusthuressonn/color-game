@@ -3,8 +3,10 @@
 ## Tech stack
 
 This is a **Foldkit** web app: TypeScript, built on **Effect**, architected like Elm (pure
-`update`/`view`, unidirectional data flow, side effects only at runtime seams). A future Effect
-backend is planned but out of scope for v1 — the v1 game is fully client-side.
+`update`/`view`, unidirectional data flow, side effects only at runtime seams). The game began fully
+client-side; a self-hosted **Effect backend on Node** (Postgres, Better Auth/Google sign-in, replay-
+verified Leaderboards) is now being added for the Classic and Daily Leaderboards — see ADR-0006. The
+pure core (`board`/`difficulty`/`prng`) is shared verbatim between client and server.
 
 **Before writing or modifying any app code you MUST use the bundled skills (they live in
 `.claude/skills/`, so they are auto-discovered — invoke them):**

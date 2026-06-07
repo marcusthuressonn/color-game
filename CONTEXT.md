@@ -68,12 +68,30 @@ The number of Targets a Player correctly found before a Run ended (i.e. Rounds c
 _Avoid_: Points, result
 
 **Player**:
-A person playing the game, identified well enough to attribute a Score on the Leaderboard.
-_Avoid_: User, account
+A person playing the game. May play anonymously (local-first, offline) or sign into an **Account**.
+A Player without an Account never appears on a **Leaderboard**.
+_Avoid_: User
+
+**Account**:
+The persistent, authenticated identity a Player signs into. It owns the Player's **Verified** Scores,
+display name, and cross-device history, and is the unit a **Leaderboard** ranks — every Leaderboard
+row is an Account, never a bare Player. One Account may be used across many devices.
+_Avoid_: User, login, profile
 
 **Leaderboard**:
-The ranked list of Players' Scores for a given Daily Challenge.
+A ranked list of Players' **Verified** Scores for a given Mode. The Daily Challenge has one
+Leaderboard per `dayKey`; Classic has its own. Ranked by Score, then Total Time as tiebreaker. Only
+**Verified** results appear — an **Unverified** result never does.
 _Avoid_: Highscores, ranking
+
+**Verified**:
+A property of a recorded Run result meaning the system can trust it enough to rank it. A Classic
+result is Verified by replaying its tap log against the Run's secret Seed (the Seed was random, so a
+matching replay proves the Run happened). A Daily Challenge result is Verified only when the server
+witnessed it during live, signed-in play (the Daily Seed is public, so a replay proves nothing). An
+**Unverified** result — e.g. a Daily played offline or logged out — still counts toward the Player's
+own history and Streak, but never appears on a Leaderboard.
+_Avoid_: Validated, trusted, confirmed
 
 ## Relationships
 
@@ -83,7 +101,12 @@ _Avoid_: Highscores, ranking
 - A **Daily Challenge** is a **Mode** whose **Seed** is fixed by the Player's local calendar date
 - A Player gets exactly one **Run** of the **Daily Challenge** per local day; it locks once ended
 - A **Streak** counts consecutive local days the Player played the **Daily Challenge**
+- A **Streak** belongs to the Player, not a device: on sign-in it is recomputed over the union of days the Player played the Daily across all devices
 - Every **Run** records a **Total Time**; in the **Daily Challenge** it breaks ties between equal **Scores**
+- A **Player** may sign into one **Account**; an anonymous Player has none and never appears on a **Leaderboard**
+- Every **Leaderboard** row is an **Account**, never a bare **Player**
+- Only a **Verified** Run result appears on a **Leaderboard**; a Classic result is Verified by replay, a Daily result only by signed-in live play
+- An **Unverified** result still counts toward the Player's own history and **Streak**, never a **Leaderboard**
 - A **Run** is a sequence of one or more **Rounds**
 - A **Round** presents exactly one **Board**
 - A **Board** contains many **Tiles**, exactly one of which is the **Target**

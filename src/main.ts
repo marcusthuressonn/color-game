@@ -201,42 +201,41 @@ export const update = (
         }
         if (index !== model.board.targetIndex) {
           const isNewBest = model.score > model.best
-          const nextStreak =
-            model.mode === 'Daily'
-              ? streakTransition(
-                  model.streak,
-                  model.lastPlayedDayKey === ''
-                    ? Option.none()
-                    : Option.some(model.lastPlayedDayKey),
-                  model.dailyDayKey,
-                )
-              : model.streak
+          const isDaily = model.mode === 'Daily'
+          const nextStreak = isDaily
+            ? streakTransition(
+                model.streak,
+                model.lastPlayedDayKey === ''
+                  ? Option.none()
+                  : Option.some(model.lastPlayedDayKey),
+                model.dailyDayKey,
+              )
+            : model.streak
+          const nextLastPlayedDayKey = isDaily ? model.dailyDayKey : model.lastPlayedDayKey
           const nextModel: Model = {
             ...model,
             status: 'GameOver',
             best: isNewBest ? model.score : model.best,
             isNewBest,
             streak: nextStreak,
-            lastPlayedDayKey:
-              model.mode === 'Daily' ? model.dailyDayKey : model.lastPlayedDayKey,
+            lastPlayedDayKey: nextLastPlayedDayKey,
           }
           const bestCommands = isNewBest
             ? [SaveBestScore({ score: model.score })]
             : []
-          const dailyCommands =
-            model.mode === 'Daily'
-              ? [
-                  SaveDailyRecord({
-                    record: {
-                      dayKey: model.dailyDayKey,
-                      dailyNumber: model.dailyNumber,
-                      seed: model.seed,
-                      score: model.score,
-                      streak: nextStreak,
-                    },
-                  }),
-                ]
-              : []
+          const dailyCommands = isDaily
+            ? [
+                SaveDailyRecord({
+                  record: {
+                    dayKey: model.dailyDayKey,
+                    dailyNumber: model.dailyNumber,
+                    seed: model.seed,
+                    score: model.score,
+                    streak: nextStreak,
+                  },
+                }),
+              ]
+            : []
           return [nextModel, [...bestCommands, ...dailyCommands]]
         }
         const nextRoundIndex = model.roundIndex + 1

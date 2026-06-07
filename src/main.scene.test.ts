@@ -158,7 +158,7 @@ describe('scene', () => {
     )
   })
 
-  test('Daily Game Over surfaces a Next Daily countdown derived from nowMs', () => {
+  test('Daily Game Over renders the countdownMs as the Next Daily countdown', () => {
     const dailyGameOverModel: Model = {
       ...initialModel,
       status: 'GameOver',

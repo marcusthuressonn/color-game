@@ -44,9 +44,7 @@ describe('update', () => {
 
   test('tapping a non-Target Tile is a no-op (no advance, no score change)', () => {
     const nonTargetIndex =
-      initialModel.board.targetIndex === 0
-        ? 1
-        : initialModel.board.targetIndex - 1
+      initialModel.board.targetIndex === 0 ? 1 : initialModel.board.targetIndex - 1
 
     Story.story(
       update,

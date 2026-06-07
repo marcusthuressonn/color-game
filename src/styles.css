@@ -140,3 +140,25 @@ body {
   color: #fafafa;
   cursor: pointer;
 }
+
+.best-score {
+  margin: 0;
+  font-size: 0.875rem;
+  font-weight: 500;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: #666;
+  font-variant-numeric: tabular-nums;
+}
+
+.best-score::before {
+  content: 'Best ';
+}
+
+.new-best {
+  margin: 0;
+  font-size: 1.125rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  color: #b8860b;
+}

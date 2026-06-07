@@ -6,8 +6,10 @@ import {
   Booted,
   ClickedPlayAgain,
   ClickedStartRun,
+  CompletedSaveBestScore,
   GenerateRunSeed,
   type Model,
+  SaveBestScore,
   StartedNewRun,
   TappedTile,
   update,
@@ -21,6 +23,8 @@ const initialModel: Model = {
   board: generateBoard(TEST_SEED, 0),
   score: 0,
   status: 'Playing',
+  best: 0,
+  isNewBest: false,
 }
 
 describe('update', () => {
@@ -137,6 +141,87 @@ describe('update', () => {
         expect(model.score).toBe(0)
         expect(model.status).toBe('Playing')
         expect(model.board).toEqual(generateBoard(42, 0))
+      }),
+    )
+  })
+
+  test('Game Over with a new best Score updates best, sets isNewBest, and issues SaveBestScore', () => {
+    const nonTargetIndex =
+      initialModel.board.targetIndex === 0 ? 1 : initialModel.board.targetIndex - 1
+    const runningModel: Model = { ...initialModel, score: 5, best: 3 }
+
+    Story.story(
+      update,
+      Story.with(runningModel),
+      Story.message(TappedTile({ index: nonTargetIndex })),
+      Story.Command.expectExact(SaveBestScore),
+      Story.model(model => {
+        expect(model.status).toBe('GameOver')
+        expect(model.best).toBe(5)
+        expect(model.isNewBest).toBe(true)
+      }),
+      Story.Command.resolve(SaveBestScore, CompletedSaveBestScore()),
+      Story.model(model => {
+        expect(model.best).toBe(5)
+        expect(model.isNewBest).toBe(true)
+      }),
+    )
+  })
+
+  test('Game Over without beating best leaves best untouched, sets isNewBest false, and issues no Commands', () => {
+    const nonTargetIndex =
+      initialModel.board.targetIndex === 0 ? 1 : initialModel.board.targetIndex - 1
+    const runningModel: Model = { ...initialModel, score: 2, best: 9 }
+
+    Story.story(
+      update,
+      Story.with(runningModel),
+      Story.message(TappedTile({ index: nonTargetIndex })),
+      Story.Command.expectNone(),
+      Story.model(model => {
+        expect(model.status).toBe('GameOver')
+        expect(model.best).toBe(9)
+        expect(model.isNewBest).toBe(false)
+      }),
+    )
+  })
+
+  test('Game Over with score equal to best does not count as a new best', () => {
+    const nonTargetIndex =
+      initialModel.board.targetIndex === 0 ? 1 : initialModel.board.targetIndex - 1
+    const runningModel: Model = { ...initialModel, score: 4, best: 4 }
+
+    Story.story(
+      update,
+      Story.with(runningModel),
+      Story.message(TappedTile({ index: nonTargetIndex })),
+      Story.Command.expectNone(),
+      Story.model(model => {
+        expect(model.status).toBe('GameOver')
+        expect(model.best).toBe(4)
+        expect(model.isNewBest).toBe(false)
+      }),
+    )
+  })
+
+  test('StartedNewRun preserves best and clears isNewBest', () => {
+    const gameOverModel: Model = {
+      ...initialModel,
+      status: 'GameOver',
+      score: 7,
+      best: 7,
+      isNewBest: true,
+    }
+
+    Story.story(
+      update,
+      Story.with(gameOverModel),
+      Story.message(ClickedPlayAgain()),
+      Story.Command.resolve(GenerateRunSeed, StartedNewRun({ seed: 42 })),
+      Story.model(model => {
+        expect(model.best).toBe(7)
+        expect(model.isNewBest).toBe(false)
+        expect(model.score).toBe(0)
       }),
     )
   })

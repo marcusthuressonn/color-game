@@ -1,10 +1,12 @@
-import { Array, Effect, Match as M, Random, Schema as S } from 'effect'
+import { BrowserKeyValueStore } from '@effect/platform-browser'
+import { Array, Effect, Match as M, Option, Random, Schema as S } from 'effect'
 import { Command, Runtime } from 'foldkit'
 import { Document, Html, html } from 'foldkit/html'
 import { m } from 'foldkit/message'
 
 import { Board, generateBoard } from './board'
 import { type OkLch, oklchToSrgb, srgbToCss } from './color'
+import { loadBestScore, saveBestScore } from './persistence'
 
 const INITIAL_SEED = 0xc010_4eed
 const INITIAL_ROUND_INDEX = 0
@@ -20,8 +22,24 @@ export const Model = S.Struct({
   board: Board,
   score: S.Number,
   status: Status,
+  best: S.Number,
+  isNewBest: S.Boolean,
 })
 export type Model = typeof Model.Type
+
+// FLAGS
+
+export const Flags = S.Struct({
+  best: S.Number,
+})
+export type Flags = typeof Flags.Type
+
+export const flags: Effect.Effect<Flags> = loadBestScore.pipe(
+  Effect.map(maybeBest =>
+    Flags.make({ best: Option.getOrElse(maybeBest, () => 0) }),
+  ),
+  Effect.provide(BrowserKeyValueStore.layerLocalStorage),
+)
 
 // MESSAGE
 
@@ -30,6 +48,7 @@ export const TappedTile = m('TappedTile', { index: S.Number })
 export const ClickedStartRun = m('ClickedStartRun')
 export const ClickedPlayAgain = m('ClickedPlayAgain')
 export const StartedNewRun = m('StartedNewRun', { seed: S.Number })
+export const CompletedSaveBestScore = m('CompletedSaveBestScore')
 
 export const Message = S.Union([
   Booted,
@@ -37,6 +56,7 @@ export const Message = S.Union([
   ClickedStartRun,
   ClickedPlayAgain,
   StartedNewRun,
+  CompletedSaveBestScore,
 ])
 export type Message = typeof Message.Type
 
@@ -47,18 +67,31 @@ export const GenerateRunSeed = Command.define(
   StartedNewRun,
 )(Random.nextInt.pipe(Effect.map(seed => StartedNewRun({ seed }))))
 
+export const SaveBestScore = Command.define(
+  'SaveBestScore',
+  { score: S.Number },
+  CompletedSaveBestScore,
+)(({ score }) =>
+  saveBestScore(score).pipe(
+    Effect.as(CompletedSaveBestScore()),
+    Effect.provide(BrowserKeyValueStore.layerLocalStorage),
+  ),
+)
+
 // UPDATE
 
-const freshModel = (seed: number): Model => ({
+const freshModel = (seed: number, best: number): Model => ({
   seed,
   roundIndex: INITIAL_ROUND_INDEX,
   board: generateBoard(seed, INITIAL_ROUND_INDEX),
   score: 0,
   status: 'Playing',
+  best,
+  isNewBest: false,
 })
 
-const titleModel = (): Model => ({
-  ...freshModel(INITIAL_SEED),
+const titleModel = (best: number): Model => ({
+  ...freshModel(INITIAL_SEED, best),
   status: 'Title',
 })
 
@@ -77,7 +110,14 @@ export const update = (
           return [model, []]
         }
         if (index !== model.board.targetIndex) {
-          return [{ ...model, status: 'GameOver' }, []]
+          const isNewBest = model.score > model.best
+          const nextModel: Model = {
+            ...model,
+            status: 'GameOver',
+            best: isNewBest ? model.score : model.best,
+            isNewBest,
+          }
+          return [nextModel, isNewBest ? [SaveBestScore({ score: model.score })] : []]
         }
         const nextRoundIndex = model.roundIndex + 1
         return [
@@ -92,13 +132,17 @@ export const update = (
       },
       ClickedStartRun: () => [model, [GenerateRunSeed()]],
       ClickedPlayAgain: () => [model, [GenerateRunSeed()]],
-      StartedNewRun: ({ seed }) => [freshModel(seed), []],
+      StartedNewRun: ({ seed }) => [freshModel(seed, model.best), []],
+      CompletedSaveBestScore: () => [model, []],
     }),
   )
 
 // INIT
 
-export const init: Runtime.ProgramInit<Model, Message> = () => [titleModel(), []]
+export const init: Runtime.ProgramInit<Model, Message, Flags> = ({ best }) => [
+  titleModel(best),
+  [],
+]
 
 // VIEW
 
@@ -154,33 +198,42 @@ const boardView = (board: Board, isRevealed: boolean): Html =>
 const scoreView = (score: number): Html =>
   p([Class('score'), AriaLabel('Score')], [score.toString()])
 
-const gameOverView = (score: number): Html =>
+const bestScoreView = (best: number): Html =>
+  p([Class('best-score'), AriaLabel('Best Score')], [best.toString()])
+
+const newBestFlourish = (): Html =>
+  p([Class('new-best'), AriaLabel('New Best')], ['New best!'])
+
+const gameOverView = (model: Model): Html =>
   div(
     [Role('dialog'), AriaLabel('Game Over'), Class('game-over')],
     [
       h2([Class('game-over-title')], ['Game Over']),
-      p([Class('game-over-score'), AriaLabel('Final Score')], [score.toString()]),
+      p([Class('game-over-score'), AriaLabel('Final Score')], [model.score.toString()]),
+      bestScoreView(model.best),
+      ...(model.isNewBest ? [newBestFlourish()] : []),
       button([Class('play-again'), OnClick(ClickedPlayAgain())], ['Play again']),
     ],
   )
 
-const titleView = (): Html =>
+const titleView = (best: number): Html =>
   div(
     [Class('title-screen')],
     [
       p([Class('title-tagline')], ['Find the odd tile.']),
+      bestScoreView(best),
       button([Class('start-run'), OnClick(ClickedStartRun())], ['Tap to play']),
     ],
   )
 
 const statusView = (model: Model): ReadonlyArray<Html> =>
   M.value(model.status).pipe(
-    M.when('Title', () => [titleView()]),
+    M.when('Title', () => [titleView(model.best)]),
     M.when('Playing', () => [scoreView(model.score), boardView(model.board, false)]),
     M.when('GameOver', () => [
       scoreView(model.score),
       boardView(model.board, true),
-      gameOverView(model.score),
+      gameOverView(model),
     ]),
     M.exhaustive,
   )

@@ -18,6 +18,8 @@ const initialModel: Model = {
   board: generateBoard(TEST_SEED, 0),
   score: 0,
   status: 'Playing',
+  best: 0,
+  isNewBest: false,
 }
 
 const titleModel: Model = { ...initialModel, status: 'Title' }
@@ -141,6 +143,61 @@ describe('scene', () => {
       Scene.expect(
         Scene.nth(Scene.all.role('gridcell'), initialModel.board.targetIndex),
       ).toHaveClass('tile-revealed'),
+    )
+  })
+
+  test('Title screen displays the persisted best Score', () => {
+    Scene.scene(
+      { update, view },
+      Scene.with({ ...titleModel, best: 12 }),
+      Scene.expect(Scene.label('Best Score')).toHaveText('12'),
+    )
+  })
+
+  test('Game Over screen displays the best Score', () => {
+    const gameOverModel: Model = {
+      ...initialModel,
+      status: 'GameOver',
+      score: 3,
+      best: 8,
+    }
+
+    Scene.scene(
+      { update, view },
+      Scene.with(gameOverModel),
+      Scene.expect(Scene.label('Best Score')).toHaveText('8'),
+    )
+  })
+
+  test('Game Over shows the new-best flourish only when isNewBest is true', () => {
+    const recordModel: Model = {
+      ...initialModel,
+      status: 'GameOver',
+      score: 9,
+      best: 9,
+      isNewBest: true,
+    }
+
+    Scene.scene(
+      { update, view },
+      Scene.with(recordModel),
+      Scene.expect(Scene.label('New Best')).toExist(),
+    )
+  })
+
+  test('Game Over hides the new-best flourish when isNewBest is false', () => {
+    const gameOverModel: Model = {
+      ...initialModel,
+      status: 'GameOver',
+      score: 2,
+      best: 9,
+      isNewBest: false,
+    }
+
+    Scene.scene(
+      { update, view },
+      Scene.with(gameOverModel),
+      Scene.expect(Scene.label('New Best')).not.toExist(),
     )
   })
 

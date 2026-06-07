@@ -2,7 +2,15 @@ import { Story } from 'foldkit'
 import { describe, expect, test } from 'vitest'
 
 import { generateBoard } from './board'
-import { Booted, type Model, TappedTile, update } from './main'
+import {
+  Booted,
+  ClickedPlayAgain,
+  GenerateRunSeed,
+  type Model,
+  StartedNewRun,
+  TappedTile,
+  update,
+} from './main'
 
 const TEST_SEED = 1
 
@@ -42,7 +50,7 @@ describe('update', () => {
     )
   })
 
-  test('tapping a non-Target Tile is a no-op (no advance, no score change)', () => {
+  test('tapping a non-Target Tile ends the Run by transitioning to GameOver', () => {
     const nonTargetIndex =
       initialModel.board.targetIndex === 0 ? 1 : initialModel.board.targetIndex - 1
 
@@ -52,7 +60,47 @@ describe('update', () => {
       Story.message(TappedTile({ index: nonTargetIndex })),
       Story.Command.expectNone(),
       Story.model(model => {
-        expect(model).toEqual(initialModel)
+        expect(model.status).toBe('GameOver')
+        expect(model.board).toEqual(initialModel.board)
+        expect(model.board.targetIndex).toBe(initialModel.board.targetIndex)
+        expect(model.score).toBe(0)
+        expect(model.roundIndex).toBe(0)
+      }),
+    )
+  })
+
+  test('tapping any Tile after GameOver is ignored', () => {
+    const gameOverModel: Model = { ...initialModel, status: 'GameOver' }
+
+    Story.story(
+      update,
+      Story.with(gameOverModel),
+      Story.message(TappedTile({ index: initialModel.board.targetIndex })),
+      Story.Command.expectNone(),
+      Story.model(model => {
+        expect(model).toEqual(gameOverModel)
+      }),
+    )
+  })
+
+  test('ClickedPlayAgain issues a GenerateRunSeed Command and leaves the model unchanged', () => {
+    const gameOverModel: Model = { ...initialModel, status: 'GameOver', score: 7, roundIndex: 7 }
+
+    Story.story(
+      update,
+      Story.with(gameOverModel),
+      Story.message(ClickedPlayAgain()),
+      Story.Command.expectExact(GenerateRunSeed),
+      Story.model(model => {
+        expect(model).toEqual(gameOverModel)
+      }),
+      Story.Command.resolve(GenerateRunSeed, StartedNewRun({ seed: 42 })),
+      Story.model(model => {
+        expect(model.seed).toBe(42)
+        expect(model.roundIndex).toBe(0)
+        expect(model.score).toBe(0)
+        expect(model.status).toBe('Playing')
+        expect(model.board).toEqual(generateBoard(42, 0))
       }),
     )
   })

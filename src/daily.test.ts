@@ -51,19 +51,16 @@ describe('dailySeed', () => {
 })
 
 describe('dailyNumber', () => {
+  const epochParts = DAILY_EPOCH_DAY_KEY.split('-')
+  const epochYear = Number(epochParts[0])
+  const epochMonth = Number(epochParts[1])
+  const epochDay = Number(epochParts[2])
+
   test('the epoch day is Daily #1', () => {
-    const parts = DAILY_EPOCH_DAY_KEY.split('-')
-    const epochYear = Number(parts[0])
-    const epochMonth = Number(parts[1])
-    const epochDay = Number(parts[2])
     expect(dailyNumber(localDate(epochYear, epochMonth, epochDay))).toBe(1)
   })
 
   test('the day after the epoch is Daily #2', () => {
-    const parts = DAILY_EPOCH_DAY_KEY.split('-')
-    const epochYear = Number(parts[0])
-    const epochMonth = Number(parts[1])
-    const epochDay = Number(parts[2])
     expect(dailyNumber(localDate(epochYear, epochMonth, epochDay + 1))).toBe(2)
   })
 

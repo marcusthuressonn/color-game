@@ -1,8 +1,31 @@
 {
-	"devDependencies": {
-		"@ai-hero/sandcastle": "0.7.0"
-	},
-	"dependencies": {
-		"zod": "4.4.3"
-	}
+  "name": "color-game",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "prepare": "test -z \"$CI\" && simple-git-hooks || true"
+  },
+  "dependencies": {
+    "@effect/platform-browser": "4.0.0-beta.78",
+    "effect": "4.0.0-beta.78",
+    "foldkit": "0.106.0",
+    "zod": "4.4.3"
+  },
+  "devDependencies": {
+    "@ai-hero/sandcastle": "0.7.0",
+    "happy-dom": "^20.9.0",
+    "simple-git-hooks": "^2.13.1",
+    "typescript": "^6.0.3",
+    "vite": "^8.0.10",
+    "vitest": "^4.1.5"
+  },
+  "simple-git-hooks": {
+    "pre-commit": "npm run typecheck && npm run test"
+  }
 }

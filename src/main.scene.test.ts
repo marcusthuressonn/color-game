@@ -31,7 +31,7 @@ const initialModel: Model = {
   lastPlayedDayKey: '',
   runStartedAtMs: 0,
   totalTimeMs: 0,
-  nowMs: 0,
+  countdownMs: 0,
 }
 
 const titleModel: Model = { ...initialModel, status: 'Title' }
@@ -169,7 +169,7 @@ describe('scene', () => {
       streak: 5,
       lastPlayedDayKey: '2026-06-07',
       totalTimeMs: 12_345,
-      nowMs: new Date(2026, 5, 7, 21, 25, 4, 0).getTime(),
+      countdownMs: 2 * 60 * 60 * 1000 + 34 * 60 * 1000 + 56 * 1000,
     }
 
     Scene.scene(
@@ -189,7 +189,7 @@ describe('scene', () => {
       dailyDayKey: '2026-06-07',
       streak: 5,
       lastPlayedDayKey: '2026-06-07',
-      nowMs: new Date(2026, 5, 7, 21, 0, 0, 0).getTime(),
+      countdownMs: 3 * 60 * 60 * 1000,
     }
 
     Scene.scene(
@@ -209,7 +209,7 @@ describe('scene', () => {
       dailyDayKey: '2026-06-07',
       streak: 5,
       lastPlayedDayKey: '2026-06-07',
-      nowMs: new Date(2026, 5, 7, 21, 0, 0, 0).getTime(),
+      countdownMs: 3 * 60 * 60 * 1000,
     }
 
     Scene.scene(
@@ -229,7 +229,7 @@ describe('scene', () => {
       status: 'GameOver',
       mode: 'Classic',
       score: 4,
-      nowMs: new Date(2026, 5, 7, 21, 0, 0, 0).getTime(),
+      countdownMs: 3 * 60 * 60 * 1000,
     }
 
     Scene.scene(
@@ -284,7 +284,7 @@ describe('scene', () => {
       }),
       prevStreak: 4,
       prevLastPlayedDayKey: Option.some('2026-06-07'),
-      initialNowMs: new Date(2026, 5, 7, 22, 0, 0, 0).getTime(),
+      initialCountdownMs: 2 * 60 * 60 * 1000,
     })
 
     Scene.scene(
@@ -310,7 +310,7 @@ describe('scene', () => {
       maybeLockedDaily: Option.none(),
       prevStreak: 0,
       prevLastPlayedDayKey: Option.none(),
-      initialNowMs: 0,
+      initialCountdownMs: 0,
     })
 
     Scene.scene(

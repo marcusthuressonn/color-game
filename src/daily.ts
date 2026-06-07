@@ -1,13 +1,12 @@
 /**
- * Pure, Effect-free, DOM-free date helpers for the Daily Challenge.
+ * Pure, Effect-DateTime-based date helpers for the Daily Challenge.
  *
- * All functions take an explicit `Date` so callers must inject the clock — no
- * ambient wall-clock reads here (see ADR-0003).
+ * Functions take a `DateTime.Zoned` so the time zone is an explicit input
+ * (typically threaded from `DateTime.nowInCurrentZone` at a runtime seam),
+ * never an ambient system-zone read (see ADR-0003).
  */
 
-import { Option } from 'effect'
-
-const MS_PER_DAY = 24 * 60 * 60 * 1000
+import { DateTime, Duration, Option } from 'effect'
 
 const SEED_MIX_MULTIPLIER_FIRST = 0x85ebca6b
 const SEED_MIX_MULTIPLIER_SECOND = 0xc2b2ae35
@@ -15,15 +14,12 @@ const SEED_MIX_SHIFT = 16
 
 const toUint32 = (value: number): number => value >>> 0
 
-const pad2 = (value: number): string => value.toString().padStart(2, '0')
-
 /**
- * Canonical local-date `YYYY-MM-DD` string. The contract behind the Daily
- * Challenge's "one attempt per local day" rule and the storage key for
- * same-day comparisons.
+ * Canonical local-date `YYYY-MM-DD` string for the given zoned instant. The
+ * contract behind the Daily Challenge's "one attempt per local day" rule and
+ * the storage key for same-day comparisons.
  */
-export const dayKey = (date: Date): string =>
-  `${date.getFullYear()}-${pad2(date.getMonth() + 1)}-${pad2(date.getDate())}`
+export const dayKey = (zoned: DateTime.Zoned): string => DateTime.formatIsoDate(zoned)
 
 /**
  * The epoch the Daily counter starts from. The local date on this `dayKey` is
@@ -31,32 +27,36 @@ export const dayKey = (date: Date): string =>
  */
 export const DAILY_EPOCH_DAY_KEY = '2026-01-01'
 
-const localMidnightUtcMs = (date: Date): number =>
-  Date.UTC(date.getFullYear(), date.getMonth(), date.getDate())
+const EPOCH_UTC = DateTime.makeUnsafe(0)
 
-const dayKeyToMidnightUtcMs = (key: string): number => {
-  const parts = key.split('-')
-  return Date.UTC(Number(parts[0]), Number(parts[1]) - 1, Number(parts[2]))
+const DAILY_EPOCH = DateTime.makeUnsafe(DAILY_EPOCH_DAY_KEY)
+
+const localDateUtcMidnight = (zoned: DateTime.Zoned): DateTime.Utc => {
+  const { year, month, day } = DateTime.toParts(zoned)
+  return DateTime.makeUnsafe({ year, month, day })
 }
 
-const DAILY_EPOCH_MS = dayKeyToMidnightUtcMs(DAILY_EPOCH_DAY_KEY)
+const dayKeyUtcMidnight = (key: string): DateTime.Utc => DateTime.makeUnsafe(key)
+
+const daysBetween = (from: DateTime.DateTime, to: DateTime.DateTime): number =>
+  Math.round(Duration.toDays(DateTime.distance(from, to)))
 
 /**
  * The "Daily #N" index for the given local date, where the epoch day is #1.
  * Dates before the epoch return non-positive numbers; callers above the epoch
  * needn't worry about that case.
  */
-export const dailyNumber = (date: Date): number =>
-  Math.floor((localMidnightUtcMs(date) - DAILY_EPOCH_MS) / MS_PER_DAY) + 1
+export const dailyNumber = (zoned: DateTime.Zoned): number =>
+  daysBetween(DAILY_EPOCH, localDateUtcMidnight(zoned)) + 1
 
 /**
  * Derive a deterministic Seed from the player's local calendar date so every
- * player on a given day faces the same Boards (ADR-0003). Two `Date` instances
+ * player on a given day faces the same Boards (ADR-0003). Two zoned instants
  * within the same local day collapse to the same Seed.
  */
-export const dailySeed = (date: Date): number => {
-  const day = localMidnightUtcMs(date) / MS_PER_DAY
-  let mixed = toUint32(day)
+export const dailySeed = (zoned: DateTime.Zoned): number => {
+  const dayCount = daysBetween(EPOCH_UTC, localDateUtcMidnight(zoned))
+  let mixed = toUint32(dayCount)
   mixed = Math.imul(mixed ^ (mixed >>> SEED_MIX_SHIFT), SEED_MIX_MULTIPLIER_FIRST)
   mixed = Math.imul(mixed ^ (mixed >>> SEED_MIX_SHIFT), SEED_MIX_MULTIPLIER_SECOND)
   return toUint32(mixed ^ (mixed >>> SEED_MIX_SHIFT))
@@ -82,9 +82,10 @@ export const streakTransition = (
     onNone: () => 1,
     onSome: lastKey => {
       if (lastKey === todayDayKey) return prevStreak
-      const gapDays =
-        (dayKeyToMidnightUtcMs(todayDayKey) - dayKeyToMidnightUtcMs(lastKey)) /
-        MS_PER_DAY
+      const gapDays = daysBetween(
+        dayKeyUtcMidnight(lastKey),
+        dayKeyUtcMidnight(todayDayKey),
+      )
       return gapDays === 1 ? prevStreak + 1 : 1
     },
   })
@@ -114,23 +115,20 @@ export const formatTotalTime = (totalTimeMs: number): string =>
   `${(totalTimeMs / 1000).toFixed(1)}s`
 
 /**
- * Milliseconds remaining from `date` until the next local midnight. At local
+ * Milliseconds remaining from `zoned` until the next local midnight. At local
  * midnight itself, returns a full day's worth of milliseconds (the clock
  * just rolled, so the next midnight is 24 hours away). Used to drive the
  * Daily result-screen countdown.
  */
-export const msUntilNextLocalMidnight = (date: Date): number => {
-  const nextMidnight = new Date(
-    date.getFullYear(),
-    date.getMonth(),
-    date.getDate() + 1,
-    0,
-    0,
-    0,
-    0,
+export const msUntilNextLocalMidnight = (zoned: DateTime.Zoned): number => {
+  const nextMidnight = zoned.pipe(
+    DateTime.add({ days: 1 }),
+    DateTime.startOf('day'),
   )
-  return nextMidnight.getTime() - date.getTime()
+  return Duration.toMillis(DateTime.distance(zoned, nextMidnight))
 }
+
+const pad2 = (value: number): string => value.toString().padStart(2, '0')
 
 /**
  * Format a millisecond duration as a player-facing `HH:MM:SS` countdown.

@@ -1,11 +1,11 @@
 import { BrowserKeyValueStore } from '@effect/platform-browser'
-import { Effect, Option } from 'effect'
+import { DateTime, Effect, Option } from 'effect'
 import { KeyValueStore } from 'effect/unstable/persistence'
 import { Story } from 'foldkit'
 import { beforeEach, describe, expect, test } from 'vitest'
 
 import { generateBoard } from './board'
-import { dayKey } from './daily'
+import { dayKey, msUntilNextLocalMidnight } from './daily'
 import {
   Booted,
   ClickedPlayAgain,
@@ -46,7 +46,7 @@ const initialModel: Model = {
   lastPlayedDayKey: '',
   runStartedAtMs: 0,
   totalTimeMs: 0,
-  nowMs: 0,
+  countdownMs: 0,
 }
 
 describe('update', () => {
@@ -454,7 +454,7 @@ describe('update', () => {
       status: 'GameOver',
       dailyNumber: 158,
       dailyDayKey: '2026-06-07',
-      nowMs: 1_000,
+      countdownMs: 1_000,
     }
 
     Story.story(
@@ -467,38 +467,38 @@ describe('update', () => {
       }),
       Story.Command.resolve(
         DetermineCountdownNow,
-        DeterminedCountdownNow({ nowMs: 1_700_000_000_000 }),
+        DeterminedCountdownNow({ countdownMs: 9_296_000 }),
       ),
     )
   })
 
-  test('DeterminedCountdownNow writes the resolved nowMs onto the Model', () => {
+  test('DeterminedCountdownNow writes the resolved countdownMs onto the Model', () => {
     const dailyGameOver: Model = {
       ...initialModel,
       mode: 'Daily',
       status: 'GameOver',
       dailyNumber: 158,
       dailyDayKey: '2026-06-07',
-      nowMs: 1_000,
+      countdownMs: 1_000,
     }
 
     Story.story(
       update,
       Story.with(dailyGameOver),
-      Story.message(DeterminedCountdownNow({ nowMs: 1_700_000_000_000 })),
+      Story.message(DeterminedCountdownNow({ countdownMs: 9_296_000 })),
       Story.Command.expectNone(),
       Story.model(model => {
-        expect(model.nowMs).toBe(1_700_000_000_000)
+        expect(model.countdownMs).toBe(9_296_000)
       }),
     )
   })
 
-  test('StartedDailyRun preserves the Model nowMs across the Run boundary', () => {
+  test('StartedDailyRun preserves the Model countdownMs across the Run boundary', () => {
     const dailyTitle: Model = {
       ...initialModel,
       status: 'Title',
       mode: 'Daily',
-      nowMs: 1_700_000_000_000,
+      countdownMs: 9_296_000,
     }
 
     Story.story(
@@ -513,7 +513,7 @@ describe('update', () => {
         }),
       ),
       Story.model(model => {
-        expect(model.nowMs).toBe(1_700_000_000_000)
+        expect(model.countdownMs).toBe(9_296_000)
       }),
     )
   })
@@ -584,7 +584,7 @@ describe('update', () => {
       maybeLockedDaily: Option.none(),
       prevStreak: 0,
       prevLastPlayedDayKey: Option.none(),
-      initialNowMs: 0,
+      initialCountdownMs: 0,
     })
     expect(model.status).toBe('Title')
     expect(model.best).toBe(5)
@@ -600,7 +600,7 @@ describe('update', () => {
       maybeLockedDaily: Option.none(),
       prevStreak: 4,
       prevLastPlayedDayKey: Option.some('2026-06-05'),
-      initialNowMs: 0,
+      initialCountdownMs: 0,
     })
     expect(model.status).toBe('Title')
     expect(model.streak).toBe(4)
@@ -620,7 +620,7 @@ describe('update', () => {
       }),
       prevStreak: 7,
       prevLastPlayedDayKey: Option.some('2026-06-07'),
-      initialNowMs: 1_000_000,
+      initialCountdownMs: 1_000_000,
     })
     expect(model.status).toBe('GameOver')
     expect(model.mode).toBe('Daily')
@@ -754,8 +754,11 @@ describe('flags', () => {
       effect.pipe(Effect.provide(BrowserKeyValueStore.layerLocalStorage)),
     )
 
+  const todayInLocalZone = (): string =>
+    dayKey(DateTime.setZone(DateTime.nowUnsafe(), DateTime.zoneMakeLocal()))
+
   test('produces a locked Daily when a record for today is persisted', async () => {
-    const today = dayKey(new Date())
+    const today = todayInLocalZone()
     await provideStore(
       saveDailyRecord({
         dayKey: today,
@@ -821,11 +824,14 @@ describe('flags', () => {
     expect(result.prevLastPlayedDayKey).toStrictEqual(Option.none())
   })
 
-  test('captures the boot-time wall clock in initialNowMs', async () => {
-    const before = Date.now()
+  test('captures the time remaining until next local midnight in initialCountdownMs', async () => {
+    const referenceZoned = DateTime.setZone(DateTime.nowUnsafe(), DateTime.zoneMakeLocal())
+    const expected = msUntilNextLocalMidnight(referenceZoned)
+    const tolerance = 5_000
     const result = await Effect.runPromise(flags)
-    const after = Date.now()
-    expect(result.initialNowMs).toBeGreaterThanOrEqual(before)
-    expect(result.initialNowMs).toBeLessThanOrEqual(after)
+    expect(result.initialCountdownMs).toBeGreaterThan(0)
+    expect(result.initialCountdownMs).toBeLessThanOrEqual(24 * 60 * 60 * 1000)
+    expect(result.initialCountdownMs).toBeGreaterThanOrEqual(expected - tolerance)
+    expect(result.initialCountdownMs).toBeLessThanOrEqual(expected + tolerance)
   })
 })

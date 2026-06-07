@@ -9,6 +9,12 @@ export default defineConfig({
       // The vendored Foldkit reference subtree is not part of this app.
       ignored: ['**/repos/**'],
     },
+    // In local dev the client and server live on different ports. Proxy the
+    // backend's public paths through vite so the browser can reach them at
+    // the same origin and CORS never enters the picture during development.
+    proxy: {
+      '/health': 'http://localhost:3000',
+    },
   },
   optimizeDeps: {
     // Only scan our own entry. Otherwise Vite globs every index.html under

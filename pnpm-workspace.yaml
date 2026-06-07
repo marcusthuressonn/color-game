@@ -1,3 +1,6 @@
+packages:
+  - 'packages/*'
+
 # Exclude fast-moving, trusted deps from the global minimumReleaseAge delay (3 days)
 # so their new releases install immediately. Everything else still waits out the delay.
 minimumReleaseAgeExclude:

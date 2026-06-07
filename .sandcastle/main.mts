@@ -17,9 +17,10 @@
 // issues are picked up after each round of merges.
 //
 // Usage:
-//   npx tsx .sandcastle/main.mts
-// Or add to package.json:
-//   "scripts": { "sandcastle": "npx tsx .sandcastle/main.mts" }
+//   npx tsx .sandcastle/main.mts [iterations]
+// Or via the package.json script:
+//   pnpm sandcastle          # uses the default iteration count
+//   pnpm sandcastle 3        # runs at most 3 plan→execute→merge cycles
 
 import * as sandcastle from '@ai-hero/sandcastle';
 import { docker } from '@ai-hero/sandcastle/sandboxes/docker';
@@ -41,18 +42,33 @@ const planSchema = z.object({
 
 // Maximum number of plan→execute→merge cycles before stopping.
 // Raise this if your backlog is large; lower it for a quick smoke-test run.
-const MAX_ITERATIONS = 10;
+// Defaults to 10, but can be overridden by the first CLI argument
+// (e.g. `pnpm sandcastle 3`).
+const DEFAULT_MAX_ITERATIONS = 10;
+const iterationsArg = process.argv[2];
+const MAX_ITERATIONS = iterationsArg ? Number(iterationsArg) : DEFAULT_MAX_ITERATIONS;
+
+if (!Number.isInteger(MAX_ITERATIONS) || MAX_ITERATIONS < 1) {
+  console.error(
+    `Invalid iteration count: "${iterationsArg}". Pass a positive integer, e.g. \`pnpm sandcastle 3\`.`,
+  );
+  process.exit(1);
+}
 
 // Hooks run inside the sandbox before the agent starts each iteration.
-// npm install ensures the sandbox always has fresh dependencies.
+// pnpm install ensures the sandbox always has fresh dependencies.
 const hooks = {
-  sandbox: { onSandboxReady: [{ command: 'npm install' }] },
+  sandbox: { onSandboxReady: [{ command: 'pnpm install' }] },
 };
 
-// Copy node_modules from the host into the worktree before each sandbox
-// starts. Avoids a full npm install from scratch; the hook above handles
-// platform-specific binaries and any packages added since the last copy.
-const copyToWorktree = ['node_modules'];
+// With pnpm, node_modules is a symlink farm pointing into the .pnpm virtual
+// store, so copying it into the sandbox tends to break those links. We skip the
+// copy by default and let the `pnpm install` hook above rebuild node_modules from
+// pnpm's content-addressable store, which is fast. Set COPY_TO_WORKTREE to a path
+// (e.g. node_modules) to opt back in.
+const copyToWorktree = process.env.COPY_TO_WORKTREE
+  ? [process.env.COPY_TO_WORKTREE]
+  : [];
 
 // ---------------------------------------------------------------------------
 // Main loop

@@ -28,8 +28,11 @@ Tests run on **Vitest** (`happy-dom` for view rendering). Two Foldkit-native sty
 
 Pure modules (Color, Seeded PRNG, Difficulty curve, Board generator) get plain Vitest unit tests.
 
-Scripts: `npm run dev` (vite), `npm run typecheck` (`tsc --noEmit`), `npm run test` (`vitest run`).
-Run `npm run typecheck && npm run test` before every commit.
+This project uses **pnpm** (pinned via the `packageManager` field in `package.json`; enable with
+Corepack). Don't use npm or yarn.
+
+Scripts: `pnpm run dev` (vite), `pnpm run typecheck` (`tsc --noEmit`), `pnpm run test` (`vitest run`).
+Run `pnpm run typecheck && pnpm run test` before every commit.
 
 ## Agent skills
 

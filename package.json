@@ -3,6 +3,7 @@
   "private": true,
   "version": "0.0.0",
   "type": "module",
+  "packageManager": "pnpm@10.32.1",
   "scripts": {
     "dev": "vite",
     "build": "vite build",
@@ -10,7 +11,7 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "prepare": "test -z \"$CI\" && simple-git-hooks || true",
-    "sandcastle": "tsx .sandcastle/main.mts"
+    "sandcastle": "tsx --env-file=.sandcastle/.env .sandcastle/main.mts"
   },
   "dependencies": {
     "@effect/platform-browser": "4.0.0-beta.78",
@@ -20,6 +21,8 @@
   },
   "devDependencies": {
     "@ai-hero/sandcastle": "0.7.0",
+    "@foldkit/vite-plugin": "0.8.0",
+    "@types/node": "25.9.1",
     "happy-dom": "^20.9.0",
     "simple-git-hooks": "^2.13.1",
     "tsx": "4.22.4",
@@ -28,6 +31,6 @@
     "vitest": "^4.1.5"
   },
   "simple-git-hooks": {
-    "pre-commit": "npm run typecheck && npm run test"
+    "pre-commit": "pnpm run typecheck && pnpm run test"
   }
 }

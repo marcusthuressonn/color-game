@@ -204,14 +204,14 @@ const bestScoreView = (best: number): Html =>
 const newBestFlourish = (): Html =>
   p([Class('new-best'), AriaLabel('New Best')], ['New best!'])
 
-const gameOverView = (model: Model): Html =>
+const gameOverView = (score: number, best: number, isNewBest: boolean): Html =>
   div(
     [Role('dialog'), AriaLabel('Game Over'), Class('game-over')],
     [
       h2([Class('game-over-title')], ['Game Over']),
-      p([Class('game-over-score'), AriaLabel('Final Score')], [model.score.toString()]),
-      bestScoreView(model.best),
-      ...(model.isNewBest ? [newBestFlourish()] : []),
+      p([Class('game-over-score'), AriaLabel('Final Score')], [score.toString()]),
+      bestScoreView(best),
+      ...(isNewBest ? [newBestFlourish()] : []),
       button([Class('play-again'), OnClick(ClickedPlayAgain())], ['Play again']),
     ],
   )
@@ -233,7 +233,7 @@ const statusView = (model: Model): ReadonlyArray<Html> =>
     M.when('GameOver', () => [
       scoreView(model.score),
       boardView(model.board, true),
-      gameOverView(model),
+      gameOverView(model.score, model.best, model.isNewBest),
     ]),
     M.exhaustive,
   )

@@ -19,6 +19,8 @@ import {
   GenerateRunSeed,
   init,
   type Model,
+  RecordTapTime,
+  RecordedTap,
   SaveBestScore,
   SaveDailyRecord,
   StartedDailyRun,
@@ -27,6 +29,7 @@ import {
   TickedCountdown,
   update,
 } from './main'
+import { replay } from './replay'
 import { saveDailyRecord } from './persistence'
 
 const TEST_SEED = 1
@@ -47,6 +50,7 @@ const initialModel: Model = {
   runStartedAtMs: 0,
   totalTimeMs: 0,
   countdownMs: 0,
+  tapLog: [],
 }
 
 describe('update', () => {
@@ -67,7 +71,11 @@ describe('update', () => {
       update,
       Story.with(initialModel),
       Story.message(TappedTile({ index: initialModel.board.targetIndex })),
-      Story.Command.expectNone(),
+      Story.Command.expectExact(RecordTapTime),
+      Story.Command.resolve(
+        RecordTapTime,
+        RecordedTap({ tap: { index: initialModel.board.targetIndex, tMs: 0 } }),
+      ),
       Story.model(model => {
         expect(model.roundIndex).toBe(1)
         expect(model.score).toBe(1)
@@ -715,6 +723,111 @@ describe('update', () => {
         expect(model.status).toBe('GameOver')
         expect(model.best).toBe(4)
         expect(model.isNewBest).toBe(false)
+      }),
+    )
+  })
+
+  test('tapping the Target issues a RecordTapTime Command with the current runStartedAtMs', () => {
+    const runningModel: Model = { ...initialModel, runStartedAtMs: 1_700_000_000_000 }
+
+    Story.story(
+      update,
+      Story.with(runningModel),
+      Story.message(TappedTile({ index: runningModel.board.targetIndex })),
+      Story.Command.expectExact(RecordTapTime),
+      Story.Command.resolve(
+        RecordTapTime,
+        RecordedTap({ tap: { index: runningModel.board.targetIndex, tMs: 250 } }),
+      ),
+    )
+  })
+
+  test('tapping a non-Target Tile does not issue RecordTapTime — only Target hits are logged', () => {
+    const nonTargetIndex =
+      initialModel.board.targetIndex === 0 ? 1 : initialModel.board.targetIndex - 1
+
+    Story.story(
+      update,
+      Story.with(initialModel),
+      Story.message(TappedTile({ index: nonTargetIndex })),
+      Story.Command.expectNone(),
+    )
+  })
+
+  test('a fresh Run starts with an empty tapLog', () => {
+    Story.story(
+      update,
+      Story.with({ ...initialModel, tapLog: [{ index: 7, tMs: 100 }] }),
+      Story.message(StartedNewRun({ seed: 11 })),
+      Story.model(model => {
+        expect(model.tapLog).toEqual([])
+      }),
+    )
+
+    Story.story(
+      update,
+      Story.with({ ...initialModel, tapLog: [{ index: 7, tMs: 100 }] }),
+      Story.message(
+        StartedDailyRun({
+          seed: 11,
+          dailyNumber: 158,
+          dayKey: '2026-06-07',
+          startedAtMs: 0,
+        }),
+      ),
+      Story.model(model => {
+        expect(model.tapLog).toEqual([])
+      }),
+    )
+  })
+
+  test('RecordedTap appends the tap to the Model tapLog in order', () => {
+    Story.story(
+      update,
+      Story.with(initialModel),
+      Story.message(RecordedTap({ tap: { index: 4, tMs: 250 } })),
+      Story.model(model => {
+        expect(model.tapLog).toEqual([{ index: 4, tMs: 250 }])
+      }),
+      Story.message(RecordedTap({ tap: { index: 9, tMs: 740 } })),
+      Story.model(model => {
+        expect(model.tapLog).toEqual([
+          { index: 4, tMs: 250 },
+          { index: 9, tMs: 740 },
+        ])
+      }),
+    )
+  })
+
+  test('a Run played through update yields a tapLog that Replay verifies as the Run Score', () => {
+    const RUN_SEED = 314_159
+    const rounds = 4
+    const seeded: Model = {
+      ...initialModel,
+      seed: RUN_SEED,
+      board: generateBoard(RUN_SEED, 0),
+      runStartedAtMs: 1_000_000,
+    }
+    const steps = Array.from({ length: rounds }, (_, roundIndex) => {
+      const targetIndex = generateBoard(RUN_SEED, roundIndex).targetIndex
+      return [
+        Story.message(TappedTile({ index: targetIndex })),
+        Story.Command.resolve(
+          RecordTapTime,
+          RecordedTap({ tap: { index: targetIndex, tMs: (roundIndex + 1) * 200 } }),
+        ),
+      ] as const
+    }).flat()
+
+    Story.story(
+      update,
+      Story.with(seeded),
+      ...steps,
+      Story.model(model => {
+        expect(model.score).toBe(rounds)
+        expect(model.tapLog).toHaveLength(rounds)
+        const replayed = replay(model.seed, model.tapLog)
+        expect(replayed).toEqual({ score: model.score, valid: true })
       }),
     )
   })

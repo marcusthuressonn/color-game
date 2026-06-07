@@ -40,6 +40,14 @@ body {
   letter-spacing: -0.01em;
 }
 
+.score {
+  margin: 0;
+  font-size: 2rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+}
+
 .board {
   display: flex;
   flex-direction: column;
@@ -59,4 +67,5 @@ body {
   border-radius: 0.5rem;
   min-width: 2.5rem;
   min-height: 2.5rem;
+  cursor: pointer;
 }

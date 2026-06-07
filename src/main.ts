@@ -11,16 +11,24 @@ const INITIAL_ROUND_INDEX = 0
 
 // MODEL
 
+export const Status = S.Literals(['Playing'])
+export type Status = typeof Status.Type
+
 export const Model = S.Struct({
+  seed: S.Number,
+  roundIndex: S.Number,
   board: Board,
+  score: S.Number,
+  status: Status,
 })
 export type Model = typeof Model.Type
 
 // MESSAGE
 
 export const Booted = m('Booted')
+export const TappedTile = m('TappedTile', { index: S.Number })
 
-export const Message = S.Union([Booted])
+export const Message = S.Union([Booted, TappedTile])
 export type Message = typeof Message.Type
 
 // UPDATE
@@ -35,13 +43,34 @@ export const update = (
     >(),
     M.tagsExhaustive({
       Booted: () => [model, []],
+      TappedTile: ({ index }) => {
+        if (index !== model.board.targetIndex) {
+          return [model, []]
+        }
+        const nextRoundIndex = model.roundIndex + 1
+        return [
+          {
+            ...model,
+            roundIndex: nextRoundIndex,
+            board: generateBoard(model.seed, nextRoundIndex),
+            score: model.score + 1,
+          },
+          [],
+        ]
+      },
     }),
   )
 
 // INIT
 
 export const init: Runtime.ProgramInit<Model, Message> = () => [
-  { board: generateBoard(INITIAL_SEED, INITIAL_ROUND_INDEX) },
+  {
+    seed: INITIAL_SEED,
+    roundIndex: INITIAL_ROUND_INDEX,
+    board: generateBoard(INITIAL_SEED, INITIAL_ROUND_INDEX),
+    score: 0,
+    status: 'Playing',
+  },
   [],
 ]
 
@@ -50,12 +79,14 @@ export const init: Runtime.ProgramInit<Model, Message> = () => [
 const {
   div,
   h1,
+  p,
   Class,
   Style,
   Role,
   AriaLabel,
   AriaRowcount,
   AriaColcount,
+  OnClick,
 } = html<Message>()
 
 const tileColorAt = (board: Board, index: number): OkLch =>
@@ -67,6 +98,7 @@ const tileView = (board: Board, index: number): Html =>
       Role('gridcell'),
       Class('tile'),
       Style({ 'background-color': srgbToCss(oklchToSrgb(tileColorAt(board, index))) }),
+      OnClick(TappedTile({ index })),
     ],
     [],
   )
@@ -91,10 +123,17 @@ const boardView = (board: Board): Html =>
     Array.makeBy(board.size, rowIndex => rowView(board, rowIndex)),
   )
 
+const scoreView = (score: number): Html =>
+  p([Class('score'), AriaLabel('Score')], [score.toString()])
+
 export const view = (model: Model): Document => ({
   title: 'Color Game',
   body: div(
     [Class('app')],
-    [h1([Class('title')], ['Color Game']), boardView(model.board)],
+    [
+      h1([Class('title')], ['Color Game']),
+      scoreView(model.score),
+      boardView(model.board),
+    ],
   ),
 })
